@@ -1,0 +1,8 @@
+#version 400 compatibility
+#define WORLD_OVERWORLD
+#define PROGRAM_GBUFFERS_TERRAIN
+#define PROGRAM_GBUFFERS_TERRAIN_SOLID
+#define GRASS_GEOMETRY
+#define GRASS_TESSELLATION
+#define tes
+#include "/program/gbuffers_terrain.tes"

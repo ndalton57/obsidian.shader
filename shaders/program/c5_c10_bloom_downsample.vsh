@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/c5_c10_bloom_downsample
   Progressively downsample bloom tiles

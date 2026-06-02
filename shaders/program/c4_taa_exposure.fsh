@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/c4_taa_exposure:
   TAA and auto exposure

@@ -142,6 +142,13 @@ vec3 animate_vertex(
 #ifdef WAVING_PLANTS
         case MATERIAL_SMALL_PLANTS:
         case MATERIAL_OPEN_EYEBLOSSOM:
+#if defined GRASS_GEOMETRY && defined SHADER_GRASS
+            // Shader Grass rebuilds grass as 3D blades and waves them itself in
+            // the geometry shader. Keep the source vertices STATIC here so the
+            // GS's per-blade random hash stays stable - otherwise the blades jump
+            // to new random positions every frame (the massive flicker).
+            return world_pos;
+#else
             return world_pos
                 + (get_wind_displacement(
                        world_pos,
@@ -151,6 +158,7 @@ vec3 animate_vertex(
                    )
                    + player_displacement)
                 * float(is_top_vertex);
+#endif
 
         case MATERIAL_TALL_PLANTS_LOWER:
             return world_pos

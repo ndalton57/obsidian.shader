@@ -22,7 +22,7 @@ float get_lightmap_shadows(float skylight) {
 
 // Prevents light leaking in caves by cancelling out sunlight in very low
 // skylight.
-// Ported from Eclipse's "LightLeak Fix" (LIGHTLEAKFIX_MODE 2): in addition to
+// Light-leak fix (mode 2): in addition to
 // the fragment's own skylight, fold in the player's smoothed sky exposure
 // (eye_skylight) so that stray sunlight is killed while you are deep inside a
 // huge cave - even beyond the shadow distance, where the shadow map can't help.

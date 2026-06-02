@@ -68,8 +68,15 @@ bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
 
     bool is_light_emitting_block = 32u <= block_id && block_id < 64u;
 
-    return (vertex_at_grid_corner || is_light_emitting_block) && is_terrain
-        && !is_transparent_block;
+    // Shader Grass: also voxelize small plants (short_grass etc., material 2) so
+    // the grass geometry shader can detect where they grow. Their vertices are
+    // not at block-grid corners, so they receive the +128 "transparent" marker
+    // below -> identical to air for the LPV (no colored-light impact), but still
+    // readable as material 2 by the grass shader's voxel lookup.
+    bool is_small_plant = block_id == 2u;
+
+    return (vertex_at_grid_corner || is_light_emitting_block || is_small_plant)
+        && is_terrain && !is_transparent_block;
 }
 
 bvec3 disjunction(bvec3 a, bvec3 b) {

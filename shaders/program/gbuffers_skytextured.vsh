@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/gbuffers_skytextured:
   Handle vanilla sun and moon and custom skies

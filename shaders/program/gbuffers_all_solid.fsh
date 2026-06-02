@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/gbuffers_all_solid:
   Handle terrain, entities, the hand, beacon beams and spider eyes
@@ -10,6 +10,13 @@
 */
 
 #include "/include/global.glsl"
+
+#if defined GRASS_GEOMETRY && defined POM && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Shader Grass build: POM is turned off on the CUTOUT-terrain program (see the
+// matching #undef in the vertex shader) so the geometry-shader varying block
+// stays small and matches across stages. The SOLID program keeps POM.
+#undef POM
+#endif
 
 layout(
     location = 0
@@ -28,6 +35,26 @@ layout(
 /* RENDERTARGETS: 1,2 */
 #endif
 
+#ifdef GRASS_GEOMETRY
+// Shader Grass: receive the varyings from the geometry stage through the same
+// (unnamed) interface block declared in the vertex shader. Member layout must
+// match exactly. Only the cutout-terrain program defines GRASS_GEOMETRY.
+in GrassVertex {
+    vec2 uv;
+    vec3 scene_pos;
+    vec4 tint;
+    flat uint material_mask;
+    flat mat3 tbn;
+    vec2 light_levels;
+    float vanilla_ao;
+#ifdef POM
+    vec2 atlas_tile_coord;
+    vec3 tangent_pos;
+    flat vec2 atlas_tile_offset;
+    flat vec2 atlas_tile_scale;
+#endif
+};
+#else
 in vec2 uv;
 in vec3 scene_pos;
 in vec4 tint;
@@ -59,6 +86,7 @@ in vec2 uv_local;
 #if defined PROGRAM_GBUFFERS_VOXELS
 in vec3 block_normal;
 #endif
+#endif // GRASS_GEOMETRY
 
 // ------------
 //   Uniforms
@@ -260,6 +288,10 @@ void main() {
     has_pom = has_pom
         && material_mask
             != MATERIAL_LAVA; // Do not calculate POM for water or lava
+    // Shader Grass: blades grown by the geometry shader are tagged as small
+    // plants and carry no parallax data, so skip POM for them (they fall into
+    // the `parallax_uv = uv` branch below and texture normally).
+    has_pom = has_pom && material_mask != MATERIAL_SMALL_PLANTS;
 
     vec3 tangent_dir = -normalize(tangent_pos);
     mat2 uv_gradient = mat2(dFdx(uv), dFdy(uv));

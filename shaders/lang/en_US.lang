@@ -17,7 +17,8 @@ screen.post                            = Post-Processing
 screen.misc                            = Misc
 screen.mods                            = Mod Options
 
-screen.weather                         = Weather 
+screen.weather                         = Weather
+screen.grass                           = Shader Grass
 screen.colored_lights                  = Colored Lights Settings
 screen.rp_settings                     = Resource Pack Settings
 screen.reflections                     = Reflections
@@ -86,6 +87,38 @@ option.WAVING_PLANTS                   = Waving Plants
 option.WAVING_PLANTS.comment           = Ground plants wave in the wind.\n\nTo add a block to the list of waving plants, open shaders/block.properties and add it to the relevant category (10016, 10017 or 10018)
 option.WAVING_LEAVES                   = Waving Leaves
 option.WAVING_LEAVES.comment           = Leaf blocks wave in the wind.\n\nTo add a block to the list of waving leaf blocks, open shaders/block.properties and add it to the relevant category (10019)
+
+option.SHADER_GRASS                    = Shader Grass
+option.SHADER_GRASS.comment            = Replaces grass with real 3D blades grown by a geometry shader. Turn OFF to fall back to Tachyon's flat grass. (Currently affects biome-tinted grass; full grass-block coverage is in progress.)
+option.GRASS_QUALITY                   = Grass Quality
+option.GRASS_QUALITY.comment           = Segments per blade (smoothness of the curve). Higher = nicer blades, more cost
+option.GRASS_DENSITY                   = Grass Density
+option.GRASS_DENSITY.comment           = How many blades grow per grass tuft. Higher = denser, more cost
+option.GRASS_RANGE                     = Grass Range
+option.GRASS_RANGE.comment             = Blades only grow within this distance of the camera (blocks); beyond it grass stays flat
+option.BASE_GRASS_HEIGHT               = Grass Height
+option.BASE_GRASS_HEIGHT.comment       = Overall height of the grass blades
+option.SHORT_GRASS_HEIGHT              = Short Grass Height
+option.SHORT_GRASS_HEIGHT.comment      = Height cap used for shorter grass
+option.GRASS_BASE_THICKNESS            = Blade Thickness
+option.GRASS_BASE_THICKNESS.comment    = Width of each blade at its base
+option.GRASS_THICKNESS_FALLOFF         = Thickness Falloff
+option.GRASS_THICKNESS_FALLOFF.comment = How quickly a blade tapers from base to tip
+option.GRASS_WAVY_STRENGTH             = Wave Strength
+option.GRASS_WAVY_STRENGTH.comment     = How strongly blades sway in the wind. 0 = still
+option.GRASS_RANDOMNESS                = Randomness
+option.GRASS_RANDOMNESS.comment        = How much blades randomly lean / vary
+option.REPLACE_SHORT_GRASS             = Replace Short Grass
+option.REPLACE_SHORT_GRASS.comment     = How placed short grass is handled (0/1/2). (Not wired up yet.)
+option.GRASS_DETECT_FALLOFF            = Edge Falloff
+option.GRASS_DETECT_FALLOFF.comment    = Shorter grass at the edge of grass patches. (Not wired up yet.)
+option.GRASS_DETECT_INV_FALLOFF        = Inverse Edge Falloff
+option.GRASS_DETECT_INV_FALLOFF.comment = Companion to Edge Falloff. (Not wired up yet.)
+option.WAVING_MULTIPART_GRASS          = Waving Tall Grass
+option.WAVING_MULTIPART_GRASS.comment  = Wave 2-block-tall grass as one piece. (Not wired up yet in this port.)
+suffix.BASE_GRASS_HEIGHT               = m
+suffix.SHORT_GRASS_HEIGHT              = m
+suffix.GRASS_RANGE                     = m
 option.SLANTED_RAIN                    = Slanted Rain
 option.SLANTED_RAIN.comment            = Slanted rain particles. Makes rainy weather a little more atmospheric
 option.RAIN_OPACITY                    = Rain Opacity
@@ -436,7 +469,7 @@ option.BLOOMY_FOG.comment                   = Intense bloom in fog. This gives t
 option.BLOOMY_FOG_INTENSITY                 = Bloomy Fog Intensity
 option.BLOOMY_FOG_INTENSITY.comment         = Adjusts the intensity of "bloomy fog"
 option.OVERWORLD_FOG_INTENSITY              = Bedrock Fog Intensity
-option.OVERWORLD_FOG_INTENSITY.comment      = Density of the low "bedrock" fog that pools in caves and low valleys (Photon's overworld air fog). Does not affect the Atmospheric Haze
+option.OVERWORLD_FOG_INTENSITY.comment      = Density of the low "bedrock" fog that pools in caves and low valleys (Tachyon's overworld air fog). Does not affect the Atmospheric Haze
 option.ATMOSPHERIC_HAZE_DENSITY             = Atmospheric Haze Density
 option.ATMOSPHERIC_HAZE_DENSITY.comment     = A separate aerial-perspective haze on distant terrain that works at ALL altitudes (incl. high mountains). 0.00 = off, and leaves all other fog untouched. Slider is 0.00-1.00; around 0.30-0.60 is usually a nice subtle haze
 option.BEDROCK_FOG_COLOR_LOCK               = Bedrock Fog Colour Lock

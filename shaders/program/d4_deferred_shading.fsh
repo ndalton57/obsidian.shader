@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/d4_deferred_shading:
   Shade terrain and entities, draw sky
@@ -537,7 +537,7 @@ void main() {
                 clamp01(shadow_distance_fade)
             );
 
-            // Light Leak Fix (ported from Eclipse "LightLeak Fix" mode 2).
+            // Light Leak Fix (mode 2).
             // Applied once here on the combined shadow so it covers every sun
             // path: shadow map, SSRT, and the lightmap fallback used beyond the
             // shadow distance - the dominant path inside the huge (~1000 block)

@@ -14,10 +14,18 @@
 ## New Features and Fixes
 
 * Light leak fix for large caves (like JJThunder sized caves, which were still leaking light)
-* <details>
+* <details open>
   <summary>Bedrock Fog</summary>
   
   <img src="docs/images/bedrock.fog.png" title="This use to just be overworld fog that was broken due to the excessive height of JJThunder worlds, but I thought it looked really cool down there, so I kept it">
+  
+
+</details>
+
+* <details open>
+  <summary>Shader Grass</summary>
+  
+  <img src="docs/images/shader.grass.png" title="Entire geometry shader pipeline ported from Eclipse shaders, a fork of Bliss shaders">
   
 
 </details>

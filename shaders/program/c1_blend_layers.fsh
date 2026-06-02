@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/c1_blend_layers
   Combine:
@@ -513,7 +513,7 @@ void main() {
     }
 #endif
 
-    // Atmospheric Haze (Eclipse-style): a separate aerial-perspective term
+    // Atmospheric Haze: a separate aerial-perspective term
     // applied to terrain REGARDLESS of VL and not capped to the air-fog volume,
     // so distant terrain gets bluish depth even high up (the normal fog tops out
     // at Y320). Sky pixels and density 0 are no-ops inside air_haze_analytic.

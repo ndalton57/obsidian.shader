@@ -1,7 +1,7 @@
 /*c1.v
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/c1_blend_layers
   Apply volumetric fog

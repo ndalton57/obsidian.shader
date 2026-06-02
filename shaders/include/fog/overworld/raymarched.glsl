@@ -111,7 +111,7 @@ mat2x3 raymarch_air_fog(
     mat2x3 light_sun = mat2x3(0.0); // Rayleigh, mie
     mat2x3 light_sky = mat2x3(0.0); // Rayleigh, mie
 
-    // Bedrock Fog: pin the mie (haze) coefficients. Photon ramps mie density
+    // Bedrock Fog: pin the mie (haze) coefficients. Tachyon ramps mie density
     // ~70x from noon to morning, which is what makes the locked fog's BRIGHTNESS
     // swing through the day (rayleigh has no time-of-day factor). Fixing it keeps
     // the fog a constant thickness/brightness; the colour is pinned at the end so
@@ -262,7 +262,7 @@ mat2x3 raymarch_air_fog(
     scattering += scattering * evening_glow;
 
 #ifdef BEDROCK_FOG_COLOR_LOCK
-    // Final safety net: pin the fog HUE to the locked tint. Photon's scattering
+    // Final safety net: pin the fog HUE to the locked tint. Tachyon's scattering
     // coefficients (esp. mie density) still change with time of day and re-tint
     // the fog blue/white; this forces the hue back to the locked colour while
     // keeping the brightness and god-ray structure, so the colour is truly

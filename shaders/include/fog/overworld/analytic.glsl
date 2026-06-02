@@ -157,12 +157,12 @@ mat2x3 air_fog_analytic(
 }
 
 // ----------------------------------------------------------------------------
-//   Atmospheric Haze (ported from Eclipse)
+//   Atmospheric Haze
 //
-//   A SEPARATE, additive aerial-perspective term. Photon's normal air fog is
+//   A SEPARATE, additive aerial-perspective term. Tachyon's normal air fog is
 //   capped to a vertical volume (air_fog_volume_top = 320) and dies within
 //   ~30 blocks of sea level, so it can never reach high terrain. This term uses
-//   huge scale heights (like Eclipse's 8000/1200), so it stays dense well above
+//   huge scale heights (8000/1200), so it stays dense well above
 //   Y1000 and gives distant mountains their bluish "depth" at any altitude.
 //   Controlled by ATMOSPHERIC_HAZE_DENSITY; 0 => exact no-op (does not touch the
 //   normal fog). Applied to terrain regardless of VL (see c1_blend_layers).
@@ -205,7 +205,7 @@ mat2x3 air_haze_analytic(
     float skylight,
     float shadow
 ) {
-    // Leave the sky to Photon's own atmosphere; the haze only tints terrain.
+    // Leave the sky to Tachyon's own atmosphere; the haze only tints terrain.
     // Density 0 is a true no-op so it never disturbs the normal fog.
     if (sky || ATMOSPHERIC_HAZE_DENSITY < eps) {
         return mat2x3(vec3(0.0), vec3(1.0));

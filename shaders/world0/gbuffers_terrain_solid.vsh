@@ -2,5 +2,6 @@
 #define WORLD_OVERWORLD
 #define PROGRAM_GBUFFERS_TERRAIN
 #define PROGRAM_GBUFFERS_TERRAIN_SOLID
+#define GRASS_GEOMETRY
 #define vsh
 #include "/program/gbuffers_all_solid.vsh"

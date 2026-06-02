@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of Photon by SixthSurge)
+  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
 
   program/gbuffers_all_solid:
   Handle terrain, entities, the hand, beacon beams and spider eyes
@@ -11,6 +11,36 @@
 
 #include "/include/global.glsl"
 
+#if defined GRASS_GEOMETRY && defined POM && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Shader Grass build: POM is turned off on the CUTOUT-terrain program so its
+// geometry-shader varying block can stay small and simple. The SOLID-terrain
+// program keeps POM (parallax on stone/brick/etc.) and routes the POM varyings
+// through the geometry stage too - see the #ifdef POM members below.
+#undef POM
+#endif
+
+#ifdef GRASS_GEOMETRY
+// Shader Grass: vertex -> geometry -> fragment varyings travel through an
+// (unnamed) interface block so a geometry stage can sit in between. Because the
+// block has no instance name its members stay in global scope, so main() does
+// not change. Both terrain programs (cutout + solid) define GRASS_GEOMETRY; the
+// POM members are present only where POM survives (the solid program).
+out GrassVertex {
+    vec2 uv;
+    vec3 scene_pos;
+    vec4 tint;
+    flat uint material_mask;
+    flat mat3 tbn;
+    vec2 light_levels;
+    float vanilla_ao;
+#ifdef POM
+    vec2 atlas_tile_coord;
+    vec3 tangent_pos;
+    flat vec2 atlas_tile_offset;
+    flat vec2 atlas_tile_scale;
+#endif
+};
+#else
 out vec2 uv;
 out vec3 scene_pos;
 out vec4 tint;
@@ -44,6 +74,7 @@ out vec2 uv_local;
 #if defined PROGRAM_GBUFFERS_VOXELS
 out vec3 block_normal;
 #endif
+#endif // GRASS_GEOMETRY
 
 // --------------
 //   Attributes
