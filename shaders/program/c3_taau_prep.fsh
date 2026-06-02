@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Photon Shader by SixthSurge
+  Tachyon Shader (a fork of Photon by SixthSurge)
 
   program/c3_taau_prep:
   Calculate neighborhood limits for TAAU

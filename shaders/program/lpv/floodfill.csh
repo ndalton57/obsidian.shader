@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Photon Shader by SixthSurge
+  Tachyon Shader (a fork of Photon by SixthSurge)
 
   program/lpv/floodfill.csh:
   Perform floodfill iteration

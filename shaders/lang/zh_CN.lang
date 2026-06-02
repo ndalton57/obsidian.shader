@@ -69,7 +69,7 @@ screen.nether_color                    = 下界基础颜色
 
 screen.distance_view                   = 距离视图
 
-option.INFO                            = Photon Shaders
+option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §e作者: SixthSurge
 value.INFO.1                           = §a作者: SixthSurge
 value.INFO.2                           = §b作者: SixthSurge

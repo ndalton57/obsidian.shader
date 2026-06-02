@@ -49,6 +49,7 @@ screen.clouds_noctilucent              = Noctilucent Clouds Settings
 
 screen.fog_rlh                         = Rayleigh Fog
 screen.fog_mie                         = Mie Fog
+screen.bedrock_fog                     = Bedrock Fog
 screen.sunlight_color                  = Sunlight Color
 screen.moonlight_color                 = Moonlight Color
 screen.blocklight_color                = Blocklight Color
@@ -73,7 +74,7 @@ screen.nether_color                    = Static Color
 
 screen.distance_view                   = Distance View
 
-option.INFO                            = Photon Shaders
+option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §eby SixthSurge
 value.INFO.1                           = §aby SixthSurge
 value.INFO.2                           = §bby SixthSurge
@@ -434,7 +435,17 @@ option.BLOOMY_FOG                           = Bloomy Fog
 option.BLOOMY_FOG.comment                   = Intense bloom in fog. This gives the appearance of light from bright objects scattering within the fog, and illuminates the area behind them. Almost no performance cost
 option.BLOOMY_FOG_INTENSITY                 = Bloomy Fog Intensity
 option.BLOOMY_FOG_INTENSITY.comment         = Adjusts the intensity of "bloomy fog"
-option.OVERWORLD_FOG_INTENSITY              = Overworld Fog Intensity
+option.OVERWORLD_FOG_INTENSITY              = Bedrock Fog Intensity
+option.OVERWORLD_FOG_INTENSITY.comment      = Density of the low "bedrock" fog that pools in caves and low valleys (Photon's overworld air fog). Does not affect the Atmospheric Haze
+option.ATMOSPHERIC_HAZE_DENSITY             = Atmospheric Haze Density
+option.ATMOSPHERIC_HAZE_DENSITY.comment     = A separate aerial-perspective haze on distant terrain that works at ALL altitudes (incl. high mountains). 0.00 = off, and leaves all other fog untouched. Slider is 0.00-1.00; around 0.30-0.60 is usually a nice subtle haze
+option.BEDROCK_FOG_COLOR_LOCK               = Bedrock Fog Colour Lock
+option.BEDROCK_FOG_COLOR_LOCK.comment       = Locks the low "bedrock" fog (the fog that pools in caves and low valleys) to a fixed colour 24/7, so it never shifts with time of day - there is no sun down in the caves. God rays from the sun still show through
+option.BEDROCK_FOG_BRIGHTNESS               = Bedrock Fog Brightness
+option.BEDROCK_FOG_BRIGHTNESS.comment       = Brightness of the locked bedrock fog (applies at all times of day). Tune it until the fog looks right
+option.BEDROCK_FOG_COLOR_R                  = Bedrock Fog Red
+option.BEDROCK_FOG_COLOR_G                  = Bedrock Fog Green
+option.BEDROCK_FOG_COLOR_B                  = Bedrock Fog Blue
 option.NETHER_FOG_INTENSITY                 = Nether Fog Intensity
 option.VL                                   = Volumetric Fog
 option.LPV_VL.comment                       = Light sources illuminate the fog. Requires Colored Lights! 

@@ -74,7 +74,7 @@ body:
     id: settings
     attributes:
       label: Shader settings
-      description: Please share your shader config file. You can find this in your shaderpacks folder, it should be called something like photon-main.zip.txt
+      description: Please share your shader config file. You can find this in your shaderpacks folder, it should be called something like tachyon-main.zip.txt
       render: conf
     validations:
       required: true

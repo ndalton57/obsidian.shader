@@ -1,7 +1,7 @@
 /*p0_cl
 --------------------------------------------------------------------------------
 
-  Photon Shader by SixthSurge
+  Tachyon Shader (a fork of Photon by SixthSurge)
 
   program/p0_clouds_prep:
   Create cloud cumulus coverage map and cloud shadow map

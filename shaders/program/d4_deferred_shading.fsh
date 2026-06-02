@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Photon Shader by SixthSurge
+  Tachyon Shader (a fork of Photon by SixthSurge)
 
   program/d4_deferred_shading:
   Shade terrain and entities, draw sky
@@ -535,6 +535,16 @@ void main() {
                 shadow_near,
                 vec3(shadow_distant),
                 clamp01(shadow_distance_fade)
+            );
+
+            // Light Leak Fix (ported from Eclipse "LightLeak Fix" mode 2).
+            // Applied once here on the combined shadow so it covers every sun
+            // path: shadow map, SSRT, and the lightmap fallback used beyond the
+            // shadow distance - the dominant path inside the huge (~1000 block)
+            // caves of tall-world datapacks like JJThunder to the Max.
+            shadows *= get_lightmap_light_leak_prevention(
+                light_levels.y,
+                eye_skylight
             );
 
             sss_depth = mix(

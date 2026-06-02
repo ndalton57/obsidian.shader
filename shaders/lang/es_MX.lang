@@ -69,7 +69,7 @@ screen.nether_color                    = Color estático
 
 screen.distance_view                   = Distancia de vista
 
-option.INFO                            = Photon Shaders
+option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §epor SixthSurge
 value.INFO.1                           = §apor SixthSurge
 value.INFO.2                           = §bpor SixthSurge

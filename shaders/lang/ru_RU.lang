@@ -68,7 +68,7 @@ screen.nether_color                    = Статичный цвет
 
 screen.distance_view                   = Дальность обзора
 
-option.INFO                            = Photon Shaders
+option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §eсделано SixthSurge
 value.INFO.1                           = §aсделано SixthSurge
 value.INFO.2                           = §bсделано SixthSurge

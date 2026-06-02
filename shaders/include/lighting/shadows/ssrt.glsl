@@ -187,7 +187,10 @@ float get_screen_space_shadows(
     );
 #endif
 
-    return float(!hit) * get_lightmap_light_leak_prevention(skylight);
+    // Light-leak prevention is now applied once to the combined shadow result
+    // in d4_deferred_shading (see get_lightmap_light_leak_prevention), so it is
+    // intentionally not multiplied in here to avoid darkening twice.
+    return float(!hit);
 }
 
 #endif // INCLUDE_LIGHTING_SHADOWS_SSRT_SHADOWS

@@ -69,7 +69,7 @@ screen.nether_color                    = Staatiline värv
 
 screen.distance_view                   = Vaatekaugus
 
-option.INFO                            = Photon Shaders
+option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §eautor: SixthSurge
 value.INFO.1                           = §aautor: SixthSurge
 value.INFO.2                           = §bautor: SixthSurge
