@@ -69,10 +69,10 @@ screen.nether_color                    = Statische Kleur
 screen.distance_view                   = Afstandsweergave
 
 option.INFO                            = Tachyon Shaders
-value.INFO.0                           = §edoor SixthSurge
-value.INFO.1                           = §adoor SixthSurge
-value.INFO.2                           = §bdoor SixthSurge
-value.INFO.3                           = §ddoor SixthSurge
+value.INFO.0                           = §edoor nullptr
+value.INFO.1                           = §adoor nullptr
+value.INFO.2                           = §bdoor nullptr
+value.INFO.3                           = §ddoor nullptr
 
 # World settings
 

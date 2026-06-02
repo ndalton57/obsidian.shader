@@ -69,10 +69,10 @@ screen.nether_color                    = Статичный цвет
 screen.distance_view                   = Дальность обзора
 
 option.INFO                            = Tachyon Shaders
-value.INFO.0                           = §eсделано SixthSurge
-value.INFO.1                           = §aсделано SixthSurge
-value.INFO.2                           = §bсделано SixthSurge
-value.INFO.3                           = §dсделано SixthSurge
+value.INFO.0                           = §eсделано nullptr
+value.INFO.1                           = §aсделано nullptr
+value.INFO.2                           = §bсделано nullptr
+value.INFO.3                           = §dсделано nullptr
 
 # World settings
 

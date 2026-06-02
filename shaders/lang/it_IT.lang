@@ -67,10 +67,10 @@ screen.nether_color                    = Colore Statico
 screen.distance_view                   = Distanza Visiva
 
 option.INFO                            = Tachyon Shader
-value.INFO.0                           = §eby SixthSurge
-value.INFO.1                           = §aby SixthSurge
-value.INFO.2                           = §bby SixthSurge
-value.INFO.3                           = §dby SixthSurge
+value.INFO.0                           = §eby nullptr
+value.INFO.1                           = §aby nullptr
+value.INFO.2                           = §bby nullptr
+value.INFO.3                           = §dby nullptr
 
 # World settings
 

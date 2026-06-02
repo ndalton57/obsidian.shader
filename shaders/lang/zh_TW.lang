@@ -70,10 +70,10 @@ screen.nether_color                    = 基礎色彩
 screen.distance_view                   = 視野距離
 
 option.INFO                            = Tachyon Shaders
-value.INFO.0                           = §e作者:SixthSurge
-value.INFO.1                           = §a作者:SixthSurge
-value.INFO.2                           = §b作者:SixthSurge
-value.INFO.3                           = §d作者:SixthSurge
+value.INFO.0                           = §e作者:nullptr
+value.INFO.1                           = §a作者:nullptr
+value.INFO.2                           = §b作者:nullptr
+value.INFO.3                           = §d作者:nullptr
 
 # World settings
 

@@ -1,10 +1,6 @@
-<br><br>
-
 <h1 align = "center">Tachyon Shaders</h1>
 
 <p align = "center">A Minecraft shader pack — a fork of <a href="https://github.com/sixthsurge/photon">Photon</a> with new features and fixes.</p>
-
-![Screenshot](docs/images/rainbow.png)
 
 ## Installation
 
@@ -18,6 +14,14 @@
 ## New Features and Fixes
 
 * Light leak fix for large caves (like JJThunder sized caves, which were still leaking light)
+* <details>
+  <summary>Bedrock Fog</summary>
+  
+  <img src="docs/images/bedrock.fog.png" title="This use to just be overworld fog that was broken due to the excessive height of JJThunder worlds, but I thought it looked really cool down there, so I kept it">
+  
+
+</details>
+
 * More incoming...
 
 ## Credit

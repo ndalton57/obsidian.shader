@@ -69,10 +69,10 @@ screen.nether_color                    = 고정 색상
 screen.distance_view                   = 거리 뷰
 
 option.INFO                            = Tachyon Shaders
-value.INFO.0                           = §e제작: SixthSurge
-value.INFO.1                           = §a제작: SixthSurge
-value.INFO.2                           = §b제작: SixthSurge
-value.INFO.3                           = §d제작: SixthSurge
+value.INFO.0                           = §e제작: nullptr
+value.INFO.1                           = §a제작: nullptr
+value.INFO.2                           = §b제작: nullptr
+value.INFO.3                           = §d제작: nullptr
 
 # World settings
 
