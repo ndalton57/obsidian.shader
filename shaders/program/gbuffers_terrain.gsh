@@ -231,14 +231,14 @@ void emit_blade_vertex(vec3 scene_p, vec2 vuv, vec4 vtint, vec2 vll, mat3 vtbn) 
     EmitVertex();
 }
 
-void emit_passthrough() {
+void emit_passthrough(bool grower) {
     for (int i = 0; i < 3; ++i) {
         v_out.uv = v_in[i].uv;
         v_out.scene_pos = v_in[i].scene_pos;
         v_out.tint = v_in[i].tint;
         v_out.material_mask = v_in[i].material_mask;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-        // The grass_block tag exists only so we can find tops in this GS; shade
+        // The grass_block tag exists only so we can find the block in this GS; shade
         // the block's own geometry as default terrain (matches stock Tachyon).
         if (v_out.material_mask == uint(MATERIAL_GRASS_BLOCK)) {
             v_out.material_mask = 0u;
@@ -256,15 +256,31 @@ void emit_passthrough() {
         v_out.atlas_tile_offset = v_in[i].atlas_tile_offset;
         v_out.atlas_tile_scale = v_in[i].atlas_tile_scale;
 #endif
-        // Use the pipeline's clip position directly. Tachyon's vertex shader
-        // already outputs clip space (so there's no need to re-project from
-        // world space), and grass-block tops are planar, so this is
-        // correct even for the tessellated sub-triangles. Crucially it MATCHES
-        // the (untessellated) shadow pass bit-for-bit - re-projecting via
-        // grass_project() here recomputed depth with slightly different rounding,
-        // which showed up as flickering shadow acne ("hash grid") as the sun
-        // moved, even with SHADER_GRASS off.
+        // Use the pipeline's clip position directly. Tachyon's vertex shader already
+        // outputs clip space, and grass-block faces are planar, so this is correct
+        // even for the tessellated sub-triangles and stays on the same depth path as
+        // the rest of the terrain (re-projecting via grass_project() rounded depth
+        // differently and showed up as flickering acne as the sun moved).
         gl_Position = gl_in[i].gl_Position;
+
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+        // GRASS-OVERLAY Z-FIGHT FIX. A grass-block SIDE is two coincident quads:
+        // this brown dirt base (solid, tessellated here) and the green grass-fringe
+        // overlay, which the cutout program draws FLAT. Tessellation jitters this
+        // quad's depth a hair per sub-triangle, so facets poke in front of the flat
+        // overlay and the dirt "eats" the green into brown blotches (worst on the
+        // grazing side faces grown from below). Push ONLY the depth (z, keeping
+        // x/y/w) of grower SIDE faces a touch toward the far plane so the overlay
+        // always wins the depth test. Because x/y/w are untouched the surface does
+        // not move on screen at all - it just loses to the overlay where they
+        // overlap. Skip the green overlay itself (greenish tint) in case a pack
+        // routes it through the solid program, and skip the top (no overlay there).
+        vec3 ft = v_in[i].tint.rgb;
+        bool greenish = ft.g > ft.r + 0.04 && ft.g > ft.b + 0.04;
+        if (grower && abs(v_in[i].tbn[2].y) < 0.5 && !greenish) {
+            gl_Position.z += GRASS_OVERLAY_DEPTH_BIAS * gl_Position.w;
+        }
+#endif
         EmitVertex();
     }
     EndPrimitive();
@@ -347,8 +363,9 @@ void main() {
 #endif
 
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    // Solid terrain: ALWAYS keep the ground; grass is added on top.
-    emit_passthrough();
+    // Solid terrain: ALWAYS keep the ground; grass is added on top. Pass make_grass
+    // so the tessellated grower face keeps its tag for the deferred shadow-bias fix.
+    emit_passthrough(make_grass);
     if (!make_grass) {
         return;
     }
@@ -371,18 +388,11 @@ void main() {
         }
 #endif
     }
-    emit_passthrough(); // keep (non-grass, or grass not on a grass block)
+    emit_passthrough(false); // keep (non-grass, or grass not on a grass block)
     return;
 #endif
 
     // ---- Generate grass blades ----
-
-#ifdef GRASS_DEBUG_NO_BLADES
-    // Diagnostic: ground was already emitted by emit_passthrough() above; skip the
-    // blades so the only thing on the elected face is the tessellated ground. Lets
-    // us tell ground-acne from blade-acne in one toggle (see settings.glsl).
-    return;
-#endif
 
     vec3 tri_center = (p0 + p1 + p2) * (1.0 / 3.0);
     float min_y = min(p0.y, min(p1.y, p2.y));
@@ -455,15 +465,7 @@ void main() {
         // unfilled - sparser but stable, which matches the "grass grows out of the
         // ground" far look. The value is the close-range tessellation level, so
         // near-field density is unchanged. (Distinct blades cap at grid^2/face.)
-#if GRASS_DENSITY == 3
-        const int grid = 12;
-#elif GRASS_DENSITY == 2
-        const int grid = 11;
-#elif GRASS_DENSITY == 1
-        const int grid = 8;
-#else
-        const int grid = 8;
-#endif
+        const int grid = GRASS_GRID; // density->resolution lives in global.glsl
         float gridf = float(grid);
 
         // Cell index on the top + a deterministic per-cell jitter keyed on the

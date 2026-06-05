@@ -58,6 +58,25 @@
 #define PHOTONICS_IN_USE
 #endif
 
+// Shader Grass: lattice / tessellation resolution per density level. The GS bins
+// sub-triangles into a `grid`x`grid` per-block lattice and the TCS tessellates the
+// top to this same level at close range - they MUST use the same number, so it
+// lives here once (used by gbuffers_terrain.gsh and .tcs). Blade count scales with
+// the SQUARE of this, so the steps 12,17,21,24,27 give roughly 1x,2x,3x,4x,5x the
+// blades. Level 1 (12) is the old densest setting; 5 (27) is five times as full
+// and five times as heavy (tessellation cost grows with the square too).
+#if GRASS_DENSITY >= 5
+#define GRASS_GRID 27
+#elif GRASS_DENSITY == 4
+#define GRASS_GRID 24
+#elif GRASS_DENSITY == 3
+#define GRASS_GRID 21
+#elif GRASS_DENSITY == 2
+#define GRASS_GRID 17
+#else
+#define GRASS_GRID 12
+#endif
+
 // Compatibility fixes
 
 #if MC_VERSION < 11700

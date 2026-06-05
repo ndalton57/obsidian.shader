@@ -117,28 +117,16 @@ void main() {
             // neighbouring patches match (no T-junction cracks). The GS bins these
             // sub-triangles into a FIXED per-block lattice (see the `grid` constant
             // in gbuffers_terrain.gsh). Invariant: the CLOSE-RANGE lvl here must
-            // equal that `grid` constant so the near field fills every cell; the
+            // equal that lattice resolution so the near field fills every cell -
+            // both now come from GRASS_GRID (global.glsl), so they can't drift. The
             // farther bands deliberately drop below it, leaving distant cells
             // unfilled (grass sparsens with distance but its blades stay at fixed
-            // world positions - no reshuffle as you approach). Levels were raised
-            // vs the original top-only grass so the lattice keeps the old density.
-#if GRASS_DENSITY == 3
-            int lvl = 12;
-            if (vDist > 10.0) lvl = 11;
-            if (vDist > 20.0) lvl = 8;
-            if (vDist > 25.0) lvl = 6;
-#elif GRASS_DENSITY == 2
-            int lvl = 11;
-            if (vDist > 13.0) lvl = 8;
-            if (vDist > 22.0) lvl = 6;
-#elif GRASS_DENSITY == 1
-            int lvl = 8;
-            if (vDist > 20.0) lvl = 6;
-#else
-            int lvl = 8;
-            if (vDist > 10.0) lvl = 6;
-            if (vDist > 20.0) lvl = 5;
-#endif
+            // world positions - no reshuffle as you approach). Blade count (and so
+            // the cost) scales with GRASS_GRID^2: GRASS_DENSITY 1..5 -> ~1x..5x.
+            int lvl = GRASS_GRID;                            // close range: 1.00x
+            if (vDist > 10.0) lvl = (GRASS_GRID * 11) / 12;  // ~0.92x
+            if (vDist > 20.0) lvl = (GRASS_GRID * 2) / 3;    // ~0.67x
+            if (vDist > 25.0) lvl = GRASS_GRID / 2;          // 0.50x
 
             gl_TessLevelOuter[0] = float(lvl);
             gl_TessLevelOuter[1] = float(lvl);

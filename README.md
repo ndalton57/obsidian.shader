@@ -4,9 +4,8 @@
 
 ## Installation
 
-* Tachyon can be used with [Iris](https://irisshaders.dev/download) (recommended) or [OptiFine](https://optifine.net/home).
-* Iris is a modern shader loader with far better performance, mod compatibility and developer features than OptiFine. Some features (such as Colored Lighting) will only work on Iris.
-* Once you have your preferred shader loader installed, place the shaderpack zip in your `.minecraft/shaderpacks` folder and select it in-game.
+* Tachyon can be used with [Iris](https://irisshaders.dev/download) (recommended) or [OptiFine](https://optifine.net/home) (untested).
+* Drop `tachyon.zip` into your `.minecraft/shaderpacks` folder
 
 ### Downloads
 * [Latest commit](https://github.com/ndalton57/tachyon/archive/refs/heads/main.zip) — download the repository as a zip and drop it straight into `shaderpacks`.

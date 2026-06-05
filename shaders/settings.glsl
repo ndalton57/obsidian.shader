@@ -39,12 +39,11 @@ const float wetnessHalflife         = 70.0;
   // viewed from at/below the section (Sodium per-direction block-face culling).
   // Needs Colored Lights (uses the voxel buffer). OFF = original top-face grass.
   #define GRASS_FIX_FACE_CULL
-  // DIAGNOSTIC (leave OFF). When on, the SOLID grass program tessellates and
-  // passes the ground through but emits NO blades. Use it to localise the
-  // "shadow acne / hatching" on the elected side face: if the acne REMAINS with
-  // blades off, it is the (tessellated) ground; if it DISAPPEARS, it is the
-  // blades. Tells us which fix to apply without guessing.
-//#define GRASS_DEBUG_NO_BLADES
+  // Pushes a grass-block SIDE's tessellated dirt base a hair behind its flat green
+  // grass-overlay so the two coincident quads can't z-fight (that z-fight ate the
+  // green fringe into brown patches). Depth-only, invisibly small; lives in the
+  // Grass > Debug menu. Raise only if brown marks ever return; 0 = off.
+  #define GRASS_OVERLAY_DEPTH_BIAS 0.0001 // [0.0 0.00002 0.00005 0.0001 0.0002 0.0005 0.001]
   #define GRASS_BASE_THICKNESS 0.3 // [0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
   #define GRASS_THICKNESS_FALLOFF 0.8 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
   #define BASE_GRASS_HEIGHT 1.0 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
@@ -52,7 +51,7 @@ const float wetnessHalflife         = 70.0;
   #define REPLACE_SHORT_GRASS 1 // [0 1 2]
   #define GRASS_DETECT_FALLOFF
   #define GRASS_DETECT_INV_FALLOFF
-  #define GRASS_DENSITY 2 // [0 1 2 3]
+  #define GRASS_DENSITY 2 // [1 2 3 4 5]
   #define GRASS_QUALITY 2 // [0 1 2]
   #define GRASS_RANGE 40.0 // [10.0 12.5 15.0 17.5 20.0 22.5 25.0 27.5 30.0 32.5 35.0 37.5 40.0 42.5 45.0 47.5 50.0 60.0 70.0 80.0 90.0 100.0]
   #define GRASS_WAVY_STRENGTH 1.0 // [0.0 0.1 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]
