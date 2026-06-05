@@ -67,6 +67,11 @@ uniform float biome_humidity;
 #ifdef COLORED_LIGHTS
 writeonly uniform uimage3D voxel_img;
 
+// Shader Grass: grass-block top tint + shared grass_top atlas tile (see
+// update_grass_tint in voxelization.glsl).
+writeonly uniform image2D grass_tint_img;
+writeonly uniform image2D grass_tile_img;
+
 uniform int renderStage;
 #endif
 
@@ -88,6 +93,7 @@ void main() {
 
 #if defined COLORED_LIGHTS && !defined PROGRAM_SHADOW_ENTITIES
     update_voxel_map(material_mask);
+    update_grass_tint(material_mask);
 #endif
 
 #if defined WORLD_NETHER

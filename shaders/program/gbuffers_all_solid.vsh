@@ -33,6 +33,13 @@ out GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    // Shader Grass: scene-space center of the block this vertex belongs to,
+    // computed from at_midBlock. Lets the solid GS/TCS grow grass from ANY
+    // submitted face of a grass block (not just the top, which Sodium culls when
+    // viewed from below) and plant the blades on the block top regardless.
+    flat vec3 block_center;
+#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;
@@ -83,6 +90,13 @@ out vec3 block_normal;
 attribute vec4 at_tangent;
 attribute vec3 mc_Entity;
 attribute vec2 mc_midTexCoord;
+
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Shader Grass: vector from this vertex to its block center (1/64-block units,
+// world-axis-aligned), used to find which block a face belongs to. Declared vec3
+// to match the shadow pass (shadow.vsh) - .xyz is the offset we need.
+attribute vec3 at_midBlock;
+#endif
 
 // ------------
 //   Uniforms
@@ -196,6 +210,12 @@ void main() {
     pos = pos - cameraPosition;
 
     scene_pos = pos;
+
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    // Block center (scene space). Grass blocks don't wave, so scene_pos is the
+    // un-displaced vertex and this lands exactly on the block center.
+    block_center = scene_pos + at_midBlock.xyz * rcp(64.0);
+#endif
 
 #if defined POM && defined PROGRAM_GBUFFERS_TERRAIN
     tangent_pos = (pos - gbufferModelViewInverse[3].xyz) * tbn;

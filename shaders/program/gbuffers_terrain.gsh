@@ -52,6 +52,9 @@ in GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    flat vec3 block_center; // solid-only: needed for the grower-face election
+#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;
@@ -68,6 +71,9 @@ out GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    flat vec3 block_center; // solid-only: needed for the grower-face election
+#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;
@@ -103,7 +109,13 @@ uniform vec2 taa_offset;
 #ifdef COLORED_LIGHTS
 uniform mat4 gbufferModelViewInverse;
 uniform usampler3D voxel_sampler;
+// Shader Grass: per-block grass-block top tint + shared grass_top atlas tile,
+// filled by the shadow pass (see update_grass_tint). Lets side-grown blades take
+// the real top colour, identical to top-grown blades (no colour pop while moving).
+uniform sampler2D grass_tint_sampler;
+uniform sampler2D grass_tile_sampler;
 #include "/include/lighting/lpv/voxelization.glsl"
+#include "/include/misc/grass_election.glsl"
 
 // Voxelized block material at a scene-space position (0 = air / outside volume).
 uint grass_read_voxel(vec3 scene_p) {
@@ -211,6 +223,9 @@ void emit_blade_vertex(vec3 scene_p, vec2 vuv, vec4 vtint, vec2 vll, mat3 vtbn) 
     v_out.tbn = vtbn;
     v_out.light_levels = vll;
     v_out.vanilla_ao = 1.0;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    v_out.block_center = vec3(0.0); // flat, unused by the fragment shader for blades
+#endif
     set_pom_defaults();
     gl_Position = grass_project(scene_p);
     EmitVertex();
@@ -232,6 +247,9 @@ void emit_passthrough() {
         v_out.tbn = v_in[i].tbn;
         v_out.light_levels = v_in[i].light_levels;
         v_out.vanilla_ao = v_in[i].vanilla_ao;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+        v_out.block_center = v_in[i].block_center;
+#endif
 #ifdef POM
         v_out.atlas_tile_coord = v_in[i].atlas_tile_coord;
         v_out.tangent_pos = v_in[i].tangent_pos;
@@ -273,7 +291,9 @@ void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
         vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
         mat3 btbn = mat3(right, normalize(cross(nrm, right)), nrm);
 
-        // Roots darker (height fade)
+        // Roots darker (height fade). src_tint is the vanilla per-vertex grass
+        // tint (gl_Color) = the biome grass colour, which also tracks grass-fade
+        // mods automatically - so block-top growers match the block they sit on.
         float heightfade = smoothstep(-0.35, 1.0, tt);
         vec4 col = src_tint;
         col.rgb *= heightfade;
@@ -297,12 +317,20 @@ void main() {
 
 #ifdef SHADER_GRASS
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    // Grow grass on grass-block tops (blockID 85, world normal up, in
-    // range). tbn[2] is the world-space geometric normal from the vertex shader.
-    if (v_in[0].material_mask == uint(MATERIAL_GRASS_BLOCK)
-        && v_in[0].tbn[2].y > 0.9) {
-        vec3 c = (p0 + p1 + p2) * (1.0 / 3.0);
-        make_grass = dot(c, c) < (GRASS_RANGE * GRASS_RANGE);
+    // Grow grass on grass blocks in range. Range + grower election are keyed on
+    // the BLOCK center so every face agrees (must match the TCS gate exactly).
+    if (v_in[0].material_mask == uint(MATERIAL_GRASS_BLOCK)) {
+        vec3 bc = v_in[0].block_center;
+        bool in_range = dot(bc, bc) < (GRASS_RANGE * GRASS_RANGE);
+#if defined COLORED_LIGHTS && defined GRASS_FIX_FACE_CULL
+        // Omnidirectional: this face grows iff it's the elected grower of an
+        // exposed grass block (lets grass survive Sodium culling the top face).
+        make_grass = in_range && grass_air_above(bc)
+            && grass_is_grower(bc, v_in[0].tbn[2]);
+#else
+        // Legacy: grass-block tops only (world normal up).
+        make_grass = in_range && v_in[0].tbn[2].y > 0.9;
+#endif
     }
 #else
     // Cutout small plants (Stage 1 behavior): greenish, ~vertical quad, in range.
@@ -349,10 +377,115 @@ void main() {
 
     // ---- Generate grass blades ----
 
+#ifdef GRASS_DEBUG_NO_BLADES
+    // Diagnostic: ground was already emitted by emit_passthrough() above; skip the
+    // blades so the only thing on the elected face is the tessellated ground. Lets
+    // us tell ground-acne from blade-acne in one toggle (see settings.glsl).
+    return;
+#endif
+
     vec3 tri_center = (p0 + p1 + p2) * (1.0 / 3.0);
     float min_y = min(p0.y, min(p1.y, p2.y));
     float max_y = max(p0.y, max(p1.y, p2.y));
     vec3 clump = vec3(tri_center.x, min_y, tri_center.z); // planted on the ground
+
+#if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined COLORED_LIGHTS
+    // Precise block center (scene), its world-space center, and integer block
+    // index. block_center is derived from at_midBlock so it is exact, and a block
+    // center sits 0.5 from every grid line, so floor() of its world position can
+    // never wobble under sub-pixel camera motion (gotcha #5). Used by the grid
+    // scatter below AND by the bushiness scan further down.
+    vec3 bc = v_in[0].block_center;
+    vec3 bw;
+    if (distance(vec3(cameraPositionInt) + cameraPositionFract, cameraPosition)
+        < 1.0) {
+        bw = bc + cameraPositionFract + vec3(cameraPositionInt);
+    } else {
+        bw = bc + cameraPosition;
+    }
+    ivec3 blk_idx = ivec3(floor(bw));
+
+#ifdef GRASS_FIX_FACE_CULL
+    // FACE-INDEPENDENT BLADE PLACEMENT (kills the jump when the grower switches
+    // side<->side or side<->top).
+    //
+    // The grower face can be the top OR any side - Sodium culls the top face when
+    // you view a section from at/below it, so we grow from whatever face it does
+    // submit. A side and the top tessellate differently (different pattern, and
+    // Sodium splits each quad along its OWN diagonal), so mapping each
+    // sub-triangle's centroid straight onto the top drops blades in DIFFERENT
+    // spots per face -> the grass visibly jumps when the grower switches.
+    //
+    // Fix: map the sub-triangle onto the top, then SNAP it to a fixed per-block
+    // lattice whose cell and jitter depend ONLY on (block, cell) - never on the
+    // face or the sub-triangle. Every face that tessellates densely enough lands
+    // on the SAME cells with the SAME jitter, so the blade set is byte-identical
+    // from any viewing angle: zero jump on a face switch.
+    //
+    // The lattice resolution tracks the TCS tessellation (one cell per sub-tri),
+    // so the visible blade count is unchanged from the old continuous placement
+    // (no density loss): a face is two triangles (~2*inner^2 sub-tris) covering
+    // all inner^2 cells, so every cell is always filled.
+    {
+        vec3 bmin = bc - 0.5;
+        vec3 an = abs(v_in[0].tbn[2]);
+        // Sub-triangle centroid within the block, per axis, in [0, 1].
+        float xl = tri_center.x - bmin.x;
+        float yl = tri_center.y - bmin.y;
+        float zl = tri_center.z - bmin.z;
+        // Relabel the grower face's two in-plane axes onto the top's (X, Z) the
+        // SAME way for every face (a per-face flip would MIRROR opposite faces).
+        float fx, fz;
+        if (an.y > 0.5) {        // top / bottom -> X, Z
+            fx = xl; fz = zl;
+        } else if (an.x > 0.5) { // +/-X: Y,Z -> X,Z
+            fx = yl; fz = zl;
+        } else {                 // +/-Z: X,Y -> X,Z
+            fx = xl; fz = yl;
+        }
+        vec2 f = clamp(vec2(fx, fz), 0.0, 0.99999);
+
+        // Lattice resolution is FIXED per density - deliberately NOT distance
+        // dependent. Cell centers therefore sit at fixed WORLD positions, so as you
+        // approach a patch the SAME cells just fill in with more blades: the grass
+        // densifies IN PLACE instead of every blade repositioning each time the
+        // block crosses a tessellation LOD band. That band-crossing reshuffle was
+        // the jarring mid-distance jitter while running forward. The TCS still
+        // lowers tessellation with distance (perf); distant cells simply stay
+        // unfilled - sparser but stable, which matches the "grass grows out of the
+        // ground" far look. The value is the close-range tessellation level, so
+        // near-field density is unchanged. (Distinct blades cap at grid^2/face.)
+#if GRASS_DENSITY == 3
+        const int grid = 12;
+#elif GRASS_DENSITY == 2
+        const int grid = 11;
+#elif GRASS_DENSITY == 1
+        const int grid = 8;
+#else
+        const int grid = 8;
+#endif
+        float gridf = float(grid);
+
+        // Cell index on the top + a deterministic per-cell jitter keyed on the
+        // STABLE (block, cell) integers, so the placement is identical from every
+        // face and never flickers as the camera moves. blk_idx is ABSOLUTE world
+        // coords (can be millions out), so reduce it mod 1024 first - large values
+        // fed to the hash lose float precision and the jitter degrades far from
+        // spawn (gotcha #5). A 1024-block repeat is imperceptible. Small multipliers
+        // keep the hash argument tiny so grass_hash stays well-conditioned.
+        vec2 cell_i = floor(f * gridf);
+        vec3 hk = mod(vec3(blk_idx), 1024.0);
+        float cseed = grass_hash(
+            dot(hk, vec3(0.1031, 0.3173, 0.0727))
+            + dot(cell_i, vec2(0.7589, 0.5341)));
+        vec2 jit = vec2(grass_hash(cseed * 1.7 + 0.10),
+                        grass_hash(cseed * 3.3 + 0.70)) - 0.5; // +/- half a cell
+        vec2 ftop = clamp((cell_i + 0.5 + jit) / gridf, 0.0, 1.0);
+
+        clump = vec3(bmin.x + ftop.x, bc.y + 0.5, bmin.z + ftop.y);
+    }
+#endif // GRASS_FIX_FACE_CULL
+#endif // PROGRAM_GBUFFERS_TERRAIN_SOLID && COLORED_LIGHTS
 
     vec4 src_tint = v_in[0].tint;
     vec2 gll = v_in[0].light_levels;
@@ -366,6 +499,41 @@ void main() {
     } else {
         stable_world = clump + cameraPosition;
     }
+
+#if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined COLORED_LIGHTS \
+    && defined GRASS_FIX_FACE_CULL
+    // PERFECT, MOVEMENT-STABLE BLADE COLOUR.
+    // The blade colour must NOT depend on which face Sodium submitted, or it would
+    // change as the camera crosses the top<->side cull transition. So read the
+    // grass-block TOP's own tint from the per-block buffer the shadow pass fills
+    // every frame, and sample the shared grass_top atlas tile. These inputs are
+    // identical for top- and side-grown blades -> the transition is a colour no-op,
+    // and since the value is the literal top gl_Color it tracks biomes and
+    // biome-blend mods exactly. The cell math MUST match update_grass_tint (same
+    // 256 window, same floor(cameraPosition.xz), same +128 centre).
+    {
+        vec3 cw = bc + cameraPosition; // block-center world, matching the shadow pass
+        ivec2 tcell = ivec2(floor(cw.xz) - floor(cameraPosition.xz)) + 128;
+        if (all(greaterThanEqual(tcell, ivec2(0)))
+            && all(lessThan(tcell, ivec2(256)))) {
+            vec3 top_tint = texelFetch(grass_tint_sampler, tcell, 0).rgb;
+            if (dot(top_tint, vec3(1.0)) > 1e-3) { // 0 => not captured; keep fallback
+                src_tint.rgb = top_tint;
+                vec4 tile = texelFetch(grass_tile_sampler, ivec2(0), 0);
+                if (tile.z > 1e-4 && tile.w > 1e-4) {
+                    // Sample the REAL grass_top texture (blades stay textured like
+                    // the block, not flat) at a world-stable per-blade point in the
+                    // tile -> keeps natural blade-to-blade variation, never flickers,
+                    // and is the same function for every grower (no transition pop).
+                    vec2 jt = fract(vec2(
+                        grass_hash(dot(stable_world, vec3(0.137, 0.071, 0.713))),
+                        grass_hash(dot(stable_world, vec3(0.713, 0.137, 0.071)))));
+                    guv = tile.xy + tile.zw * jt;
+                }
+            }
+        }
+    }
+#endif
 #ifndef PROGRAM_GBUFFERS_TERRAIN_SOLID
     // Cutout plants only: per-cluster hash seed from the BLOCK the grass sits on.
     // Offsetting y by -0.5 before floor() keeps it stable for tops that sit on an
@@ -391,15 +559,21 @@ void main() {
     // holds short_grass (read 0.6 above its surface, where short_grass sits)
     // contributes a boost that falls off with distance from this blade, out to
     // ~1.8 blocks. The short_grass itself is hidden by the cutout program.
-    vec2 pw = stable_world.xz;       // world xz of this blade
-    vec2 blk = floor(pw);            // its block
+    // Choose the 3x3 neighbours by the STABLE integer block index (blk_idx), NOT
+    // floor() of the blade's world xz: a blade landing on an integer xz made
+    // floor() wobble under sub-pixel camera motion, so the short_grass scan (and
+    // thus the height) flickered on some blocks near flowers/short_grass
+    // (gotcha #5). Each voxel read lands at a neighbour's block-above CENTER (where
+    // short_grass sits) - mid-cell, so the read itself is stable too.
+    vec2 pw = stable_world.xz;       // blade world xz (continuous -> smooth falloff)
     float bushiness = 0.0;
     for (int dx = -1; dx <= 1; ++dx) {
         for (int dz = -1; dz <= 1; ++dz) {
-            vec2 nb = blk + 0.5 + vec2(float(dx), float(dz)); // neighbour center
-            float sg = read_short_grass(
-                clump + vec3(nb.x - pw.x, 0.6, nb.y - pw.y));
-            float falloff = 1.0 - smoothstep(0.5, 1.8, length(pw - nb));
+            vec3 nb_scene = bc + vec3(float(dx), 1.0, float(dz));
+            float sg = read_short_grass(nb_scene);
+            vec2 nb_world = vec2(float(blk_idx.x) + 0.5 + float(dx),
+                                 float(blk_idx.z) + 0.5 + float(dz));
+            float falloff = 1.0 - smoothstep(0.5, 1.8, length(pw - nb_world));
             bushiness = max(bushiness, sg * falloff);
         }
     }

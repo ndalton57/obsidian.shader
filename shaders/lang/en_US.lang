@@ -90,6 +90,8 @@ option.WAVING_LEAVES.comment           = Leaf blocks wave in the wind.\n\nTo add
 
 option.SHADER_GRASS                    = Shader Grass
 option.SHADER_GRASS.comment            = Replaces grass with real 3D blades grown by a geometry shader. Turn OFF to fall back to Tachyon's flat grass. (Currently affects biome-tinted grass; full grass-block coverage is in progress.)
+option.GRASS_FIX_FACE_CULL             = Fix Grass Pop-In
+option.GRASS_FIX_FACE_CULL.comment     = Grows grass from any visible face of a grass block, not just the top, so field grass no longer pops out for whole chunks when seen from below. Requires Colored Lights. OFF reverts to top-face-only grass.
 option.GRASS_QUALITY                   = Grass Quality
 option.GRASS_QUALITY.comment           = Segments per blade (smoothness of the curve). Higher = nicer blades, more cost
 option.GRASS_DENSITY                   = Grass Density

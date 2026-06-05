@@ -93,6 +93,20 @@ bool is_corner(vec3 pos, float tolerance) {
 }
 
 void update_voxel_map(uint block_id) {
+    // Shader Grass: small plants (short_grass/flowers, material 2) MUST always be
+    // stored with the transparent (+128) marker below, never as a bare corner id.
+    // A plant's cross-quad has some vertices inside the is_corner() tolerance and
+    // some outside, so different vertices of the SAME plant would otherwise store
+    // 2 (corner -> "solid") and 130 (non-corner -> "transparent") into the same
+    // voxel cell. Those writes race with no sync, so the cell flips 2<->130 every
+    // frame -> grass_voxel_is_solid() flips -> grass_air_above() flips -> the whole
+    // grass block's blades blink on/off (only on blocks with a plant on top,
+    // inconsistently, regardless of the camera). Forcing the marker removes the
+    // race. This also matches the documented intent (plants are transparent to the
+    // LPV, zero colored-light impact) and is still read back as material 2 via the
+    // `& 127u` mask in grass_read_voxel.
+    bool small_plant = block_id == 2u;
+
     vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
     vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
     vec3 scene_pos = transform(shadowModelViewInverse, view_pos);
@@ -125,13 +139,52 @@ void update_voxel_map(uint block_id) {
         block_id = 79; // light gray tint
     }
 
-    // Mark transparent light sources
-    block_id
-        = (vertex_at_grid_corner) ? block_id : clamp(block_id + 128u, 0u, 255u);
+    // Mark transparent light sources (and always-transparent small plants)
+    block_id = (vertex_at_grid_corner && !small_plant)
+        ? block_id
+        : clamp(block_id + 128u, 0u, 255u);
 
     if (is_voxelized && is_inside_voxel_volume(voxel_pos)) {
         imageStore(voxel_img, ivec3(voxel_pos), uvec4(block_id, 0u, 0u, 0u));
     }
+}
+
+// Shader Grass: snapshot each grass-block TOP's biome tint (gl_Color) + the shared
+// grass_top atlas tile into camera-relative buffers, so the grass geometry shader
+// can colour blades grown from ANY face with the real top colour. The sun renders
+// every top each frame, and this VSH image store is NOT depth tested, so the tint
+// is captured even when the top is occluded from the sun or culled for the player
+// camera. Storing the literal gl_Color means biome + biome-blend mods are tracked
+// exactly, and because it is keyed to the block (not the face) the colour can't
+// change as the player moves across Sodium's top<->side face-cull transition.
+void update_grass_tint(uint block_id) {
+    if (block_id != 81u) { // MATERIAL_GRASS_BLOCK
+        return;
+    }
+    if (gl_Normal.y < 0.5) {
+        return; // only the top face carries the biome grass tint
+    }
+
+    vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
+    vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
+    vec3 world = transform(shadowModelViewInverse, view_pos) + cameraPosition;
+
+    // Camera-relative XZ cell. MUST match the read in gbuffers_terrain.gsh: same
+    // 256-wide window, same floor(cameraPosition.xz) (NOT the split camera, so the
+    // two passes agree bit-for-bit), same +128 centre.
+    ivec2 cell = ivec2(floor(world.xz) - floor(cameraPosition.xz)) + 128;
+    if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(256)))) {
+        return;
+    }
+
+    imageStore(grass_tint_img, cell, vec4(gl_Color.rgb, 1.0));
+
+    // The grass_top atlas tile is identical for every grass block, so one shared
+    // cell is enough; side-grown blades sample the real grass texture from it.
+    vec2 uv_minus_mid = gl_MultiTexCoord0.xy - mc_midTexCoord;
+    vec2 tile_offset = min(gl_MultiTexCoord0.xy, mc_midTexCoord - uv_minus_mid);
+    vec2 tile_scale = abs(uv_minus_mid) * 2.0;
+    imageStore(grass_tile_img, ivec2(0), vec4(tile_offset, tile_scale));
 }
 #endif
 

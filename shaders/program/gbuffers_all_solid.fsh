@@ -47,6 +47,9 @@ in GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    flat vec3 block_center; // solid-only: needed for the grower-face election
+#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;

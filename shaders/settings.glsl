@@ -34,6 +34,17 @@ const float wetnessHalflife         = 70.0;
   // geometry shader. Present only in the "Grass" build. Turn this OFF to fall
   // back to Tachyon's normal flat grass.
   #define SHADER_GRASS
+  // Grow grass from whichever face of a grass block Sodium actually submits (not
+  // only the top). Fixes field grass popping out for whole chunk sections when
+  // viewed from at/below the section (Sodium per-direction block-face culling).
+  // Needs Colored Lights (uses the voxel buffer). OFF = original top-face grass.
+  #define GRASS_FIX_FACE_CULL
+  // DIAGNOSTIC (leave OFF). When on, the SOLID grass program tessellates and
+  // passes the ground through but emits NO blades. Use it to localise the
+  // "shadow acne / hatching" on the elected side face: if the acne REMAINS with
+  // blades off, it is the (tessellated) ground; if it DISAPPEARS, it is the
+  // blades. Tells us which fix to apply without guessing.
+//#define GRASS_DEBUG_NO_BLADES
   #define GRASS_BASE_THICKNESS 0.3 // [0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
   #define GRASS_THICKNESS_FALLOFF 0.8 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
   #define BASE_GRASS_HEIGHT 1.0 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
