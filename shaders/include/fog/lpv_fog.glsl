@@ -17,8 +17,10 @@ vec3 sample_lpv(vec3 position_world) {
 
 #if defined WORLD_OVERWORLD
 vec2 overworld_fog_density_no_noise(vec3 position_world) {
-    const vec2 mul = -rcp(air_fog_falloff_half_life);
-    const vec2 add = -mul * air_fog_falloff_start;
+    // Dissipation rate scaled to world height for the bedrock fog (see
+    // bedrock_fog_half_life), matching the air fog.
+    vec2 mul = -rcp(bedrock_fog_half_life());
+    vec2 add = -mul * air_fog_falloff_start;
 
     vec2 density = exp2(min(position_world.y * mul + add, 0.0));
 

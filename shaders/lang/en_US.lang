@@ -475,17 +475,17 @@ option.BLOOMY_FOG                           = Bloomy Fog
 option.BLOOMY_FOG.comment                   = Intense bloom in fog. This gives the appearance of light from bright objects scattering within the fog, and illuminates the area behind them. Almost no performance cost
 option.BLOOMY_FOG_INTENSITY                 = Bloomy Fog Intensity
 option.BLOOMY_FOG_INTENSITY.comment         = Adjusts the intensity of "bloomy fog"
-option.OVERWORLD_FOG_INTENSITY              = Bedrock Fog Intensity
-option.OVERWORLD_FOG_INTENSITY.comment      = Density of the low "bedrock" fog that pools in caves and low valleys (Tachyon's overworld air fog). Does not affect the Atmospheric Haze
+option.BEDROCK_FOG                          = Bedrock Fog
+option.BEDROCK_FOG.comment                  = A self-lit fog that pools in the bottom of any world (caves, low valleys). Its colour and brightness are fixed - it does not change with time of day, weather, or sun, and dissipates upward at a rate scaled to the world's height so it always sits low. Configure it in the Bedrock Fog sub-menu
 option.ATMOSPHERIC_HAZE_DENSITY             = Atmospheric Haze Density
 option.ATMOSPHERIC_HAZE_DENSITY.comment     = A separate aerial-perspective haze on distant terrain that works at ALL altitudes (incl. high mountains). 0.00 = off, and leaves all other fog untouched. Slider is 0.00-1.00; around 0.30-0.60 is usually a nice subtle haze
-option.BEDROCK_FOG_COLOR_LOCK               = Bedrock Fog Colour Lock
-option.BEDROCK_FOG_COLOR_LOCK.comment       = Locks the low "bedrock" fog (the fog that pools in caves and low valleys) to a fixed colour 24/7, so it never shifts with time of day - there is no sun down in the caves. God rays from the sun still show through
-option.BEDROCK_FOG_BRIGHTNESS               = Bedrock Fog Brightness
-option.BEDROCK_FOG_BRIGHTNESS.comment       = Brightness of the locked bedrock fog (applies at all times of day). Tune it until the fog looks right
-option.BEDROCK_FOG_COLOR_R                  = Bedrock Fog Red
-option.BEDROCK_FOG_COLOR_G                  = Bedrock Fog Green
-option.BEDROCK_FOG_COLOR_B                  = Bedrock Fog Blue
+option.BEDROCK_FOG_BRIGHTNESS               = Brightness
+option.BEDROCK_FOG_BRIGHTNESS.comment       = Brightness of the bedrock fog. Tune it until the fog looks right
+option.BEDROCK_FOG_DISSIPATION              = Dissipation
+option.BEDROCK_FOG_DISSIPATION.comment      = How fast the bedrock fog thins out going up, as a fraction of the world's height. Scales with world size automatically, so the fog sits at the same relative height in any world and always stays low. Smaller = thins faster / sits lower; larger = rises higher. The dense base stays at the bottom, so the fog is always visible
+option.BEDROCK_FOG_COLOR_R                  = Red
+option.BEDROCK_FOG_COLOR_G                  = Green
+option.BEDROCK_FOG_COLOR_B                  = Blue
 option.NETHER_FOG_INTENSITY                 = Nether Fog Intensity
 option.VL                                   = Volumetric Fog
 option.LPV_VL.comment                       = Light sources illuminate the fog. Requires Colored Lights! 

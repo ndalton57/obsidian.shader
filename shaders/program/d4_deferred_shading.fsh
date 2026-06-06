@@ -540,8 +540,7 @@ void main() {
             // Light Leak Fix (mode 2).
             // Applied once here on the combined shadow so it covers every sun
             // path: shadow map, SSRT, and the lightmap fallback used beyond the
-            // shadow distance - the dominant path inside the huge (~1000 block)
-            // caves of tall-world datapacks like JJThunder to the Max.
+            // shadow distance - the dominant path inside large/deep caves.
             shadows *= get_lightmap_light_leak_prevention(
                 light_levels.y,
                 eye_skylight

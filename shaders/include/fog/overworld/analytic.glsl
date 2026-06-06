@@ -13,8 +13,10 @@ vec2 air_fog_analytic_airmass(
 ) {
     // Integral of density function with respect to t
 
-    const vec2 mul = -rcp(air_fog_falloff_half_life);
-    const vec2 add = -mul * air_fog_falloff_start;
+    // Dissipation rate scaled to world height for the bedrock fog (see
+    // bedrock_fog_half_life), so it matches the raymarched path.
+    vec2 mul = -rcp(bedrock_fog_half_life());
+    vec2 add = -mul * air_fog_falloff_start;
 
     vec2 a = ray_origin_world.y * mul + add;
     vec2 p1 = exp2(ray_length * ray_direction_world.y * mul + a);
@@ -60,7 +62,7 @@ mat2x3 air_fog_analytic(
     // fog's brightness is time-static too (rayleigh has no time-of-day factor).
     vec3 fog_mie_scat = fog_params.mie_scattering_coeff;
     vec3 fog_mie_ext = fog_params.mie_extinction_coeff;
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     fog_mie_scat = vec3(0.00135);
     fog_mie_ext = vec3(0.0015);
 #endif
@@ -90,10 +92,10 @@ mat2x3 air_fog_analytic(
     float scatter_amount = 1.0;
     float anisotropy = 1.0;
 
-    // Bedrock Fog Colour Lock (see raymarched.glsl) - keep the analytic fog
-    // (used when VL is off) consistent with the volumetric fog: locked 24/7.
+    // Bedrock Fog (see raymarched.glsl) - keep the analytic fog (used when VL is
+    // off) consistent with the volumetric fog.
     vec3 fog_ambient_color = ambient_color;
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     fog_ambient_color = pow(
                             vec3(
                                 BEDROCK_FOG_COLOR_R,
@@ -105,15 +107,13 @@ mat2x3 air_fog_analytic(
         * (BEDROCK_FOG_BRIGHTNESS * 2.5);
 #endif
 
-    // Lock the direct / god-ray colour too (see raymarched.glsl).
-    vec3 fog_light_color = light_color;
-#ifdef BEDROCK_FOG_COLOR_LOCK
-    fog_light_color = fog_ambient_color;
-#endif
-
     scattering += 2.0 * (rayleigh_scattering + mie_scattering) * isotropic_phase
         * fog_ambient_color;
 
+#ifndef BEDROCK_FOG
+    // Direct (sun) in-scattering / god-ray shafts. The bedrock fog skips this
+    // entirely - it is self-lit only (see raymarched.glsl).
+    vec3 fog_light_color = light_color;
     for (int i = 0; i < 4; ++i) {
         float mie_phase = 0.7 * henyey_greenstein_phase(LoV, 0.5 * anisotropy)
             + 0.3 * henyey_greenstein_phase(LoV, -0.2 * anisotropy);
@@ -126,20 +126,25 @@ mat2x3 air_fog_analytic(
         scatter_amount *= 0.5;
         anisotropy *= 0.7;
     }
+#endif
     //*/
 
+#ifndef BEDROCK_FOG
+    // Bedrock fog is self-lit (no sun/sky input), so skip the skylight gate -
+    // otherwise it vanishes in sunless / enclosed areas (see raymarched.glsl).
     scattering *= max(skylight, eye_skylight);
+#endif
     scattering *= clamp01(1.0 - blindness - darknessFactor);
 
     // Artifically brighten fog in the early morning and evening (looks nice)
     float evening_glow
         = 0.75 * linear_step(0.05, 1.0, exp(-300.0 * sqr(sun_dir.y + 0.02)));
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     evening_glow = 0.0; // keep the locked fog fully time-static
 #endif
     scattering += scattering * evening_glow;
 
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     // Final safety net: pin the fog HUE to the locked tint (see raymarched.glsl).
     vec3 locked_tint = pow(
         vec3(BEDROCK_FOG_COLOR_R, BEDROCK_FOG_COLOR_G, BEDROCK_FOG_COLOR_B),

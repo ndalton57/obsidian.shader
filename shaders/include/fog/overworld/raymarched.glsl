@@ -12,8 +12,12 @@
 #include "/include/utility/space_conversion.glsl"
 
 vec2 air_fog_density(vec3 world_pos) {
-    const vec2 mul = -rcp(air_fog_falloff_half_life);
-    const vec2 add = -mul * air_fog_falloff_start;
+    // Dissipation rate (falloff half-life) scaled to the world's height for the
+    // bedrock fog (see bedrock_fog_half_life), so the fog rises to the same
+    // fraction of any world and always sits low. The dense base stays anchored, so
+    // this never thins it - only how fast it fades upward changes.
+    vec2 mul = -rcp(bedrock_fog_half_life());
+    vec2 add = -mul * air_fog_falloff_start;
 
     vec2 density = exp2(min(world_pos.y * mul + add, 0.0));
 
@@ -112,14 +116,12 @@ mat2x3 raymarch_air_fog(
     mat2x3 light_sky = mat2x3(0.0); // Rayleigh, mie
 
     // Bedrock Fog: pin the mie (haze) coefficients. Tachyon ramps mie density
-    // ~70x from noon to morning, which is what makes the locked fog's BRIGHTNESS
-    // swing through the day (rayleigh has no time-of-day factor). Fixing it keeps
-    // the fog a constant thickness/brightness; the colour is pinned at the end so
-    // only the magnitude matters here, and god-ray shafts still come/go with the
-    // sun via the shadow test.
+    // ~70x from noon to morning, which would otherwise swing the fog's BRIGHTNESS
+    // through the day (rayleigh has no time-of-day factor). Pinning it keeps the
+    // fog a constant thickness/brightness; the colour is pinned at the end.
     vec3 fog_mie_scat = fog_params.mie_scattering_coeff;
     vec3 fog_mie_ext = fog_params.mie_extinction_coeff;
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     fog_mie_scat = vec3(0.00135);
     fog_mie_ext = vec3(0.0015);
 #endif
@@ -184,9 +186,16 @@ mat2x3 raymarch_air_fog(
     light_sky[1] *= fog_mie_scat;
 
     if (!sky) {
+#ifndef BEDROCK_FOG
         // Skylight falloff
         light_sky[0] *= max(skylight, eye_skylight);
         light_sky[1] *= max(skylight, eye_skylight);
+#else
+        // Bedrock fog is self-lit at a fixed brightness with NO sun/sky input, so
+        // it must not be gated by skylight - otherwise it vanishes in any sunless
+        // or enclosed area ("no sun down in the caves"). The fixed self-emission
+        // is the ambient term below.
+#endif
     }
 
     float LoV = dot(world_dir, light_dir);
@@ -208,13 +217,11 @@ mat2x3 raymarch_air_fog(
     vec3 ambient_color = ambient_color_fog;
 #endif
 
-    // Bedrock Fog Colour Lock: lock the low "bedrock" fog (the fog that pools in
-    // caves / low valleys) to a fixed tint 24/7. It never shifts with time of
-    // day - there is no sun down in the caves. The directional god-ray term
-    // below still uses the real sun. (This fog only exists below ~Y320, so the
-    // lock never touches the high mountains.)
+    // Bedrock Fog: a fixed self-lit tint, the same 24/7. It never shifts with
+    // time of day, weather, or sun - there is no sun down in the caves, so the
+    // fog is lit by itself and the sun/god-ray term below is skipped entirely.
     vec3 fog_ambient_color = ambient_color;
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     fog_ambient_color = pow(
                             vec3(
                                 BEDROCK_FOG_COLOR_R,
@@ -226,18 +233,13 @@ mat2x3 raymarch_air_fog(
         * (BEDROCK_FOG_BRIGHTNESS * 2.5);
 #endif
 
-    // Also lock the DIRECT / god-ray colour. The sunlit term below uses
-    // light_color (warm at sunrise, white at noon) and in an open cavern the sun
-    // reaches most of the fog, so this is what actually drives the fog's colour
-    // shift through the day. Locking it makes the fog colour fully time-static
-    // (the god-ray shafts still appear from the sun's real direction).
-    vec3 fog_light_color = light_color;
-#ifdef BEDROCK_FOG_COLOR_LOCK
-    fog_light_color = fog_ambient_color;
-#endif
-
     scattering += 2.0 * light_sky * vec2(isotropic_phase) * fog_ambient_color;
 
+#ifndef BEDROCK_FOG
+    // Direct (sun) in-scattering = the god-ray shafts. The bedrock fog skips this
+    // entirely - it is self-lit only (the fixed-colour ambient term above), so its
+    // brightness never tracks the sun's position and it has no god rays.
+    vec3 fog_light_color = light_color;
     for (int i = 0; i < 4; ++i) {
         float mie_phase = 0.7 * henyey_greenstein_phase(LoV, 0.5 * anisotropy)
             + 0.3 * henyey_greenstein_phase(LoV, -0.2 * anisotropy);
@@ -249,6 +251,7 @@ mat2x3 raymarch_air_fog(
         scatter_amount *= 0.5;
         anisotropy *= 0.7;
     }
+#endif
     //*/
 
     scattering *= clamp01(1.0 - blindness - darknessFactor);
@@ -256,16 +259,16 @@ mat2x3 raymarch_air_fog(
     // Artifically brighten fog in the early morning and evening (looks nice)
     float evening_glow
         = 0.75 * linear_step(0.05, 1.0, exp(-300.0 * sqr(sun_dir.y + 0.02)));
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     evening_glow = 0.0; // keep the locked fog fully time-static
 #endif
     scattering += scattering * evening_glow;
 
-#ifdef BEDROCK_FOG_COLOR_LOCK
+#ifdef BEDROCK_FOG
     // Final safety net: pin the fog HUE to the locked tint. Tachyon's scattering
     // coefficients (esp. mie density) still change with time of day and re-tint
     // the fog blue/white; this forces the hue back to the locked colour while
-    // keeping the brightness and god-ray structure, so the colour is truly
+    // keeping the brightness, so the colour is truly
     // time-static.
     vec3 locked_tint = pow(
         vec3(BEDROCK_FOG_COLOR_R, BEDROCK_FOG_COLOR_G, BEDROCK_FOG_COLOR_B),
