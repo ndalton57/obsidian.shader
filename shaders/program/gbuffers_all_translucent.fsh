@@ -616,6 +616,19 @@ void main() {
     vec3 shadows = vec3(pow8(adjusted_light_levels.y));
 #endif
 
+    // Light Leak Fix (mode 2): water deep in a cave was still showing the sun -
+    // both its specular glint and the reflected sky/sun. Fold in the player's sky
+    // exposure (eye_skylight) to cancel the sun underground, matching the terrain
+    // fix in d4_deferred_shading (see get_lightmap_light_leak_prevention). On the
+    // surface this is ~1 (no-op); deep in a cave it falls to ~0, so SSR of the
+    // cave itself still reflects but the sky/sun and its glint do not.
+    float light_leak_prevention = 1.0;
+#if defined WORLD_OVERWORLD || defined WORLD_END
+    light_leak_prevention
+        = get_lightmap_light_leak_prevention(light_levels.y, eye_skylight);
+    shadows *= light_leak_prevention;
+#endif
+
     // Diffuse lighting
 
     fragment_color.rgb
@@ -670,7 +683,7 @@ void main() {
             tbn[2],
             direction_world,
             direction_world * new_tbn,
-            light_levels.y,
+            light_levels.y * light_leak_prevention,
             is_water
         );
     }
