@@ -264,21 +264,18 @@ void emit_passthrough(bool grower) {
         gl_Position = gl_in[i].gl_Position;
 
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-        // GRASS-OVERLAY Z-FIGHT FIX. A grass-block SIDE is two coincident quads:
-        // this brown dirt base (solid, tessellated here) and the green grass-fringe
-        // overlay, which the cutout program draws FLAT. Tessellation jitters this
-        // quad's depth a hair per sub-triangle, so facets poke in front of the flat
-        // overlay and the dirt "eats" the green into brown blotches (worst on the
-        // grazing side faces grown from below). Push ONLY the depth (z, keeping
-        // x/y/w) of grower SIDE faces a touch toward the far plane so the overlay
-        // always wins the depth test. Because x/y/w are untouched the surface does
-        // not move on screen at all - it just loses to the overlay where they
-        // overlap. Skip the green overlay itself (greenish tint) in case a pack
-        // routes it through the solid program, and skip the top (no overlay there).
+        // GRASS-OVERLAY Z-FIGHT FIX. A grass-block SIDE is two coincident quads: this
+        // tessellated brown dirt base and the FLAT green fringe overlay (cutout program).
+        // Tessellation jitters this quad's depth so it z-fights the overlay and eats the
+        // green; push this face's depth toward the far plane so the overlay wins - but
+        // only over the top fringe where the overlay is, fading to 0 by 0.5 below the top
+        // so the deferred AO sees no depth STEP on the dirt. See CLAUDE.md gotcha #12.
         vec3 ft = v_in[i].tint.rgb;
         bool greenish = ft.g > ft.r + 0.04 && ft.g > ft.b + 0.04;
+        float below_top = (v_in[i].block_center.y + 0.5) - v_in[i].scene_pos.y;
+        float bias_fade = 1.0 - smoothstep(0.3, 0.5, below_top);
         if (grower && abs(v_in[i].tbn[2].y) < 0.5 && !greenish) {
-            gl_Position.z += GRASS_OVERLAY_DEPTH_BIAS * gl_Position.w;
+            gl_Position.z += GRASS_OVERLAY_DEPTH_BIAS * gl_Position.w * bias_fade;
         }
 #endif
         EmitVertex();
@@ -400,11 +397,9 @@ void main() {
     vec3 clump = vec3(tri_center.x, min_y, tri_center.z); // planted on the ground
 
 #if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined COLORED_LIGHTS
-    // Precise block center (scene), its world-space center, and integer block
-    // index. block_center is derived from at_midBlock so it is exact, and a block
-    // center sits 0.5 from every grid line, so floor() of its world position can
-    // never wobble under sub-pixel camera motion (gotcha #5). Used by the grid
-    // scatter below AND by the bushiness scan further down.
+    // Block center (scene) + precise world-space position + integer block index, for the
+    // raw blade placement below and the bushiness scan. block_center is exact (from
+    // at_midBlock), so floor() of its world pos is wobble-free (CLAUDE.md gotcha #5).
     vec3 bc = v_in[0].block_center;
     vec3 bw;
     if (distance(vec3(cameraPositionInt) + cameraPositionFract, cameraPosition)
@@ -416,26 +411,11 @@ void main() {
     ivec3 blk_idx = ivec3(floor(bw));
 
 #ifdef GRASS_FIX_FACE_CULL
-    // FACE-INDEPENDENT BLADE PLACEMENT (kills the jump when the grower switches
-    // side<->side or side<->top).
-    //
-    // The grower face can be the top OR any side - Sodium culls the top face when
-    // you view a section from at/below it, so we grow from whatever face it does
-    // submit. A side and the top tessellate differently (different pattern, and
-    // Sodium splits each quad along its OWN diagonal), so mapping each
-    // sub-triangle's centroid straight onto the top drops blades in DIFFERENT
-    // spots per face -> the grass visibly jumps when the grower switches.
-    //
-    // Fix: map the sub-triangle onto the top, then SNAP it to a fixed per-block
-    // lattice whose cell and jitter depend ONLY on (block, cell) - never on the
-    // face or the sub-triangle. Every face that tessellates densely enough lands
-    // on the SAME cells with the SAME jitter, so the blade set is byte-identical
-    // from any viewing angle: zero jump on a face switch.
-    //
-    // The lattice resolution tracks the TCS tessellation (one cell per sub-tri),
-    // so the visible blade count is unchanged from the old continuous placement
-    // (no density loss): a face is two triangles (~2*inner^2 sub-tris) covering
-    // all inner^2 cells, so every cell is always filled.
+    // RAW TESSELLATION placement: one blade per sub-triangle at its own position (no
+    // grid), so the tessellator does distance LOD for free. The grower can be a SIDE, so
+    // relabel the sub-triangle's two in-plane coords onto the block TOP the same way for
+    // every face - grass always grows from the top plane. (Side and top tessellate
+    // differently, so blades JUMP when the grower swaps; see CLAUDE.md.)
     {
         vec3 bmin = bc - 0.5;
         vec3 an = abs(v_in[0].tbn[2]);
@@ -453,38 +433,12 @@ void main() {
         } else {                 // +/-Z: X,Y -> X,Z
             fx = xl; fz = yl;
         }
-        vec2 f = clamp(vec2(fx, fz), 0.0, 0.99999);
+        vec2 f = clamp(vec2(fx, fz), 0.0, 1.0);
 
-        // Lattice resolution is FIXED per density - deliberately NOT distance
-        // dependent. Cell centers therefore sit at fixed WORLD positions, so as you
-        // approach a patch the SAME cells just fill in with more blades: the grass
-        // densifies IN PLACE instead of every blade repositioning each time the
-        // block crosses a tessellation LOD band. That band-crossing reshuffle was
-        // the jarring mid-distance jitter while running forward. The TCS still
-        // lowers tessellation with distance (perf); distant cells simply stay
-        // unfilled - sparser but stable, which matches the "grass grows out of the
-        // ground" far look. The value is the close-range tessellation level, so
-        // near-field density is unchanged. (Distinct blades cap at grid^2/face.)
-        const int grid = GRASS_GRID; // density->resolution lives in global.glsl
-        float gridf = float(grid);
-
-        // Cell index on the top + a deterministic per-cell jitter keyed on the
-        // STABLE (block, cell) integers, so the placement is identical from every
-        // face and never flickers as the camera moves. blk_idx is ABSOLUTE world
-        // coords (can be millions out), so reduce it mod 1024 first - large values
-        // fed to the hash lose float precision and the jitter degrades far from
-        // spawn (gotcha #5). A 1024-block repeat is imperceptible. Small multipliers
-        // keep the hash argument tiny so grass_hash stays well-conditioned.
-        vec2 cell_i = floor(f * gridf);
-        vec3 hk = mod(vec3(blk_idx), 1024.0);
-        float cseed = grass_hash(
-            dot(hk, vec3(0.1031, 0.3173, 0.0727))
-            + dot(cell_i, vec2(0.7589, 0.5341)));
-        vec2 jit = vec2(grass_hash(cseed * 1.7 + 0.10),
-                        grass_hash(cseed * 3.3 + 0.70)) - 0.5; // +/- half a cell
-        vec2 ftop = clamp((cell_i + 0.5 + jit) / gridf, 0.0, 1.0);
-
-        clump = vec3(bmin.x + ftop.x, bc.y + 0.5, bmin.z + ftop.y);
+        // Plant the blade at the sub-triangle's own mapped position on the top plane
+        // (block top = bc.y + 0.5). No lattice cell, no jitter: the tessellation
+        // pattern alone decides where blades land - that IS the raw-tessellation look.
+        clump = vec3(bmin.x + f.x, bc.y + 0.5, bmin.z + f.y);
     }
 #endif // GRASS_FIX_FACE_CULL
 #endif // PROGRAM_GBUFFERS_TERRAIN_SOLID && COLORED_LIGHTS
