@@ -66,6 +66,11 @@ uniform float biome_humidity;
 
 #ifdef COLORED_LIGHTS
 writeonly uniform uimage3D voxel_img;
+#if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
+// Shader Grass: each rendered grass-block face stamps the air cell it faces here, so
+// the election can confirm a side is really meshed (update_grass_faces).
+writeonly uniform uimage3D grass_face_img;
+#endif
 
 // Shader Grass: grass-block top tint + shared grass_top atlas tile (see
 // update_grass_tint in voxelization.glsl).
@@ -94,6 +99,9 @@ void main() {
 #if defined COLORED_LIGHTS && !defined PROGRAM_SHADOW_ENTITIES
     update_voxel_map(material_mask);
     update_grass_tint(material_mask);
+#if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
+    update_grass_faces(material_mask);
+#endif
 #endif
 
 #if defined WORLD_NETHER

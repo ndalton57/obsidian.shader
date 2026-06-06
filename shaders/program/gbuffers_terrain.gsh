@@ -109,6 +109,20 @@ uniform vec2 taa_offset;
 #ifdef COLORED_LIGHTS
 uniform mat4 gbufferModelViewInverse;
 uniform usampler3D voxel_sampler;
+#if PROCEDURAL_GEOMETRY_MODE >= 3
+uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow / mode 4 camera)
+#endif
+#if PROCEDURAL_GEOMETRY_MODE >= 4
+// Mode 4 (Camera): frameCounter is the temporal stamp. BOTH terrain programs compile the
+// election read (grass_face_rendered), so both declare it. Only the SOLID program WRITES
+// the mask (in its grass-block passthrough), and image load/store needs
+// GL_ARB_shader_image_load_store (#version 400) - enabled in the solid GS stub - so the
+// image is declared there ONLY; the cutout program stays image-free (no extension needed).
+uniform int frameCounter;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+writeonly uniform uimage3D grass_face_img;
+#endif
+#endif
 // Shader Grass: per-block grass-block top tint + shared grass_top atlas tile,
 // filled by the shadow pass (see update_grass_tint). Lets side-grown blades take
 // the real top colour, identical to top-grown blades (no colour pop while moving).
@@ -283,6 +297,32 @@ void emit_passthrough(bool grower) {
     EndPrimitive();
 }
 
+#ifndef PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Cutout short_grass re-emit: scale the plant's height by SHORT_GRASS_HEIGHT (height knob) times
+// the distance factor `h` (1 = full, 0 = flat), so it SHRINKS into the ground with distance as the
+// block-top blades take over. Re-projects from scene space - fine for this billboard (the
+// re-projection acne worry is only the tessellated SOLID ground); the base vert stays put, so no
+// z-fight at the root.
+void emit_short_grass_scaled(float h) {
+    float base_y = min(v_in[0].scene_pos.y, min(v_in[1].scene_pos.y, v_in[2].scene_pos.y));
+    float scale = SHORT_GRASS_HEIGHT * h; // height knob x distance shrink
+    for (int i = 0; i < 3; ++i) {
+        v_out.uv = v_in[i].uv;
+        vec3 sp = v_in[i].scene_pos;
+        sp.y = base_y + (sp.y - base_y) * scale; // pull the top toward the ground
+        v_out.scene_pos = sp;
+        v_out.tint = v_in[i].tint;
+        v_out.material_mask = v_in[i].material_mask;
+        v_out.tbn = v_in[i].tbn;
+        v_out.light_levels = v_in[i].light_levels;
+        v_out.vanilla_ao = v_in[i].vanilla_ao;
+        gl_Position = grass_project(sp);
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+#endif
+
 // Build one tapered, curved, waving blade. `root` is the scene-space base (used
 // to build/project the vertices); `world_root` is the PRECISE world-space base
 // (used only to drive the wind, so it stays stable as the camera moves).
@@ -335,14 +375,27 @@ void main() {
     if (v_in[0].material_mask == uint(MATERIAL_GRASS_BLOCK)) {
         vec3 bc = v_in[0].block_center;
         bool in_range = dot(bc, bc) < (GRASS_RANGE * GRASS_RANGE);
-#if defined COLORED_LIGHTS && defined GRASS_FIX_FACE_CULL
-        // Omnidirectional: this face grows iff it's the elected grower of an
-        // exposed grass block (lets grass survive Sodium culling the top face).
+#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
+        // Modes 2+: this face grows iff it's the elected grower of an exposed grass
+        // block (lets grass survive Sodium culling the top face).
         make_grass = in_range && grass_air_above(bc)
             && grass_is_grower(bc, v_in[0].tbn[2]);
 #else
-        // Legacy: grass-block tops only (world normal up).
+        // Mode 1 (Top Only): grass-block tops only (world normal up).
         make_grass = in_range && v_in[0].tbn[2].y > 0.9;
+#endif
+#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 4
+        // CAMERA-PASS MASK (mode 4): every grass-block face that reaches this GS was
+        // drawn by the CAMERA (Sodium already culled the rest), so stamp the air cell it
+        // faces with frameCounter. NEXT frame's election reads it back -> grass grows from
+        // a face the camera truly draws: no enclosed-block blind spot, single face, no
+        // double-draw. See CLAUDE.md gotcha #9.
+        if (in_range) {
+            // grass_mask_cell: ABSOLUTE world-index texel (NOT camera-relative), so next
+            // frame's election reads the SAME texel even as you walk/rotate. See CLAUDE.md #9.
+            imageStore(grass_face_img, grass_mask_cell(bc + round(v_in[0].tbn[2])),
+                       uvec4(grass_stamp_now(), 0u, 0u, 0u));
+        }
 #endif
     }
 #else
@@ -352,9 +405,10 @@ void main() {
         bool greenish = (t.g > t.r + 0.04) && (t.g > t.b + 0.04);
         vec3 face_n = cross(p1 - p0, p2 - p0);
         bool vertical = abs(normalize(face_n + vec3(0.0, 1e-6, 0.0)).y) < 0.5;
-        vec3 c = (p0 + p1 + p2) * (1.0 / 3.0);
-        bool in_range = dot(c, c) < (GRASS_RANGE * GRASS_RANGE);
-        make_grass = greenish && vertical && in_range;
+        // Identify short_grass (greenish, ~vertical quad). It's re-emitted at SHORT_GRASS_HEIGHT
+        // scale; on a grass block it also SHRINKS to 0 with distance to cross-fade into the
+        // block-top shader grass. See CLAUDE.md.
+        make_grass = greenish && vertical;
     }
 #endif
 #endif
@@ -367,13 +421,13 @@ void main() {
         return;
     }
 #else
-    // Cutout: HIDE placed short_grass ONLY where it sits on a GRASS BLOCK (which
-    // grows replacement block-top grass, Eclipse REPLACE_SHORT_GRASS). On dirt,
-    // podzol, etc. there's no replacement, so keep the vanilla plant - otherwise
-    // it just vanishes. Non-grass (flowers, ...) always passes through.
+    // Cutout: short_grass (greenish, ~vertical) is re-emitted at SHORT_GRASS_HEIGHT scale; when it
+    // sits on a GRASS BLOCK it also SHRINKS to 0 with distance to cross-fade into the block-top
+    // shader grass. On dirt/podzol it just keeps the height knob (no shrink). Non-grass (flowers,
+    // ...) passes straight through.
     if (make_grass) {
+        float h = 1.0; // distance shrink (1 = full); only short_grass ON a grass block shrinks
 #ifdef COLORED_LIGHTS
-        // Read the block beneath the plant from the voxel buffer.
         vec3 base = vec3(
             (p0.x + p1.x + p2.x) * (1.0 / 3.0),
             min(p0.y, min(p1.y, p2.y)),
@@ -381,11 +435,18 @@ void main() {
         );
         if (grass_read_voxel(base - vec3(0.0, 0.4, 0.0))
             == uint(MATERIAL_GRASS_BLOCK)) {
-            return; // hidden - block-top grass replaces it
+            // Shrink over [0.6R, 0.8R]: full beyond 0.8R (fills space past the shader-grass range),
+            // gone by 0.6R where the full-height blades have taken over. See CLAUDE.md.
+            h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8, length(base));
+            if (h < 0.02) {
+                return; // fully shrunk -> hidden (full-height shader grass covers it)
+            }
         }
 #endif
+        emit_short_grass_scaled(h); // SHORT_GRASS_HEIGHT x h height shrink
+        return;
     }
-    emit_passthrough(false); // keep (non-grass, or grass not on a grass block)
+    emit_passthrough(false); // non-grass (flowers, ...) -> vanilla
     return;
 #endif
 
@@ -410,7 +471,7 @@ void main() {
     }
     ivec3 blk_idx = ivec3(floor(bw));
 
-#ifdef GRASS_FIX_FACE_CULL
+#if PROCEDURAL_GEOMETRY_MODE >= 2
     // RAW TESSELLATION placement: one blade per sub-triangle at its own position (no
     // grid), so the tessellator does distance LOD for free. The grower can be a SIDE, so
     // relabel the sub-triangle's two in-plane coords onto the block TOP the same way for
@@ -440,7 +501,7 @@ void main() {
         // pattern alone decides where blades land - that IS the raw-tessellation look.
         clump = vec3(bmin.x + f.x, bc.y + 0.5, bmin.z + f.y);
     }
-#endif // GRASS_FIX_FACE_CULL
+#endif // PROCEDURAL_GEOMETRY_MODE >= 2
 #endif // PROGRAM_GBUFFERS_TERRAIN_SOLID && COLORED_LIGHTS
 
     vec4 src_tint = v_in[0].tint;
@@ -457,7 +518,7 @@ void main() {
     }
 
 #if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined COLORED_LIGHTS \
-    && defined GRASS_FIX_FACE_CULL
+    && PROCEDURAL_GEOMETRY_MODE >= 2
     // PERFECT, MOVEMENT-STABLE BLADE COLOUR.
     // The blade colour must NOT depend on which face Sodium submitted, or it would
     // change as the camera crosses the top<->side cull transition. So read the

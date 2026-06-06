@@ -186,6 +186,32 @@ void update_grass_tint(uint block_id) {
     vec2 tile_scale = abs(uv_minus_mid) * 2.0;
     imageStore(grass_tile_img, ivec2(0), vec4(tile_offset, tile_scale));
 }
+
+// Shader Grass: record which faces of a grass block the shadow pass meshes, so the
+// election can require a side be CONFIRMED rendered instead of deducing it from the
+// neighbour voxel read (blind to fully-enclosed blocks - see CLAUDE.md). Each rendered
+// grass-block face stamps the air cell it faces; the election reads block_center +
+// side_dir. Grass blocks within GRASS_RANGE only, to keep the write count down.
+// MODE 3 (Mask) ONLY: mode 4 (Camera) stamps the mask from the gbuffer GS instead (the shadow
+// pass can't see the camera's per-section direction culling), so it owns grass_face_img there
+// and this shadow-pass write must stay out of the way.
+#if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
+void update_grass_faces(uint block_id) {
+    if (block_id != 81u) { // MATERIAL_GRASS_BLOCK
+        return;
+    }
+    vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
+    vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
+    vec3 scene_pos = transform(shadowModelViewInverse, view_pos);
+    if (dot(scene_pos, scene_pos) > GRASS_RANGE * GRASS_RANGE) {
+        return;
+    }
+    ivec3 face_cell = ivec3(scene_to_voxel_space(scene_pos)) + ivec3(round(gl_Normal));
+    if (is_inside_voxel_volume(vec3(face_cell))) {
+        imageStore(grass_face_img, face_cell, uvec4(1u, 0u, 0u, 0u));
+    }
+}
+#endif
 #endif
 
 #endif // INCLUDE_LIGHTING_LPV_VOXELIZATION

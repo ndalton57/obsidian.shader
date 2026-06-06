@@ -22,6 +22,14 @@
 uniform vec3 cameraPosition;
 uniform mat4 gbufferModelViewInverse;
 uniform usampler3D voxel_sampler;
+#if PROCEDURAL_GEOMETRY_MODE >= 3
+uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow / mode 4 camera)
+#endif
+#if PROCEDURAL_GEOMETRY_MODE >= 4
+uniform int frameCounter; // Shader Grass mode 4: reads the camera-mask temporal stamp
+uniform vec3 cameraPositionFract; // mode 4: exact world-index mask cell (Iris split camera)
+uniform ivec3 cameraPositionInt;
+#endif
 #include "/include/lighting/lpv/voxelization.glsl"
 #include "/include/misc/grass_election.glsl"
 #endif
@@ -99,13 +107,13 @@ void main() {
             vec3 bc = tc_in[0].block_center;
             vDist = length(bc);
             bool in_range = dot(bc, bc) < (GRASS_RANGE * GRASS_RANGE);
-#if defined COLORED_LIGHTS && defined GRASS_FIX_FACE_CULL
+#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
             // Tessellate the single elected grower face of an exposed grass block
             // (the GS runs the identical election, so they never disagree).
             grass = in_range && grass_air_above(bc)
                 && grass_is_grower(bc, tc_in[0].tbn[2]);
 #else
-            // Legacy: grass-block tops only.
+            // Mode 1 (Top Only): grass-block tops only.
             grass = in_range && tc_in[0].tbn[2].y > 0.9;
 #endif
         }

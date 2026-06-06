@@ -58,20 +58,30 @@
 #define PHOTONICS_IN_USE
 #endif
 
-// Shader Grass: close-range tessellation level per density (used by gbuffers_terrain.tcs;
-// the GS grows one blade per sub-triangle). Blade count and cost scale with the SQUARE,
-// so 12,17,21,24,27 give ~1x..5x. See CLAUDE.md.
+// Shader Grass: close-range TESSELLATION LEVEL per density (the TCS gl_TessLevel; the GS grows one
+// blade per sub-triangle). Despite the name this is the tessellation density, not a grid lattice.
+// Cost scales with the SQUARE of the level. 6,9,12,17,21 for density 1..5. See CLAUDE.md.
 #if GRASS_DENSITY >= 5
-#define GRASS_GRID 27
-#elif GRASS_DENSITY == 4
-#define GRASS_GRID 24
-#elif GRASS_DENSITY == 3
 #define GRASS_GRID 21
-#elif GRASS_DENSITY == 2
+#elif GRASS_DENSITY == 4
 #define GRASS_GRID 17
-#else
+#elif GRASS_DENSITY == 3
 #define GRASS_GRID 12
+#elif GRASS_DENSITY == 2
+#define GRASS_GRID 9
+#else
+#define GRASS_GRID 6
 #endif
+
+// Shader Grass camera mask (PROCEDURAL_GEOMETRY_MODE 4): side length of the per-face mask image,
+// DECOUPLED from VOXEL_VOLUME_SIZE (the LPV) on purpose. The mask is addressed world-index-mod-
+// SIZE, so two cells SIZE apart collide. Writes span +/-(GRASS_RANGE+1); reads are bounded by the
+// AHEAD voxel volume (the grass_is_grower gate), reaching only ~108 from the camera at
+// VOXEL_VOLUME_SIZE 128. No collision while (read_max + write_max) < SIZE, i.e. GRASS_RANGE <~ 146
+// here - so 256 covers the whole 8..128 range slider with margin. MUST match grass_face_img in
+// shaders.properties. r16ui, ~33 MB. Raise this only if you raise VOXEL_VOLUME_SIZE or push
+// GRASS_RANGE past ~146. See CLAUDE.md gotcha #9.
+#define GRASS_MASK_SIZE 256
 
 // Compatibility fixes
 

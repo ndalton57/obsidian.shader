@@ -34,27 +34,31 @@ const float wetnessHalflife         = 70.0;
   // geometry shader. Present only in the "Grass" build. Turn this OFF to fall
   // back to Tachyon's normal flat grass.
   #define SHADER_GRASS
-  // Grow grass from whichever face of a grass block Sodium actually submits (not
-  // only the top). Fixes field grass popping out for whole chunk sections when
-  // viewed from at/below the section (Sodium per-direction block-face culling).
-  // Needs Colored Lights (uses the voxel buffer). OFF = original top-face grass.
-  #define GRASS_FIX_FACE_CULL
-  // Pushes a grass-block SIDE's tessellated dirt base a hair behind its flat green
-  // grass-overlay so the two coincident quads can't z-fight (that z-fight ate the
-  // green fringe into brown patches). Depth-only, invisibly small; lives in the
-  // Grass > Debug menu. Raise only if brown marks ever return; 0 = off.
-  #define GRASS_OVERLAY_DEPTH_BIAS 0.0001 // [0.0 0.00002 0.00005 0.0001 0.0002 0.0005 0.001]
+  // How shader grass picks which face of a grass block grows the blades:
+  //   1 Top Only - grass on grass-block tops only (the original behaviour). Pops out for
+  //                whole chunk sections seen from below; needs no voxel buffer.
+  //   2 Deduced  - also grows from exposed sides, deduced from neighbour voxel reads
+  //                (cheaper; blind to fully-enclosed blocks).
+  //   3 Mask     - a shadow-pass mask confirms each face was meshed (handles enclosed/
+  //                overhead blocks; still can't see the camera's per-section culling).
+  //   4 Camera   - grows only from faces the CAMERA actually draws (no pop-out; ~free).
+  // Modes 2+ need Colored Lights. Default 4. See CLAUDE.md gotcha #9.
+  #define PROCEDURAL_GEOMETRY_MODE 4 // [1 2 3 4]
+  // Z-fight fix for grass-block sides: pushes the tessellated dirt base a hair behind the
+  // flat green grass-overlay so the green fringe isn't eaten into brown. Depth-only,
+  // invisibly small, HARDCODED (not a menu option). See CLAUDE.md gotcha #12.
+  #define GRASS_OVERLAY_DEPTH_BIAS 0.00001
   #define GRASS_BASE_THICKNESS 0.3 // [0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
   #define GRASS_THICKNESS_FALLOFF 0.8 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
-  #define BASE_GRASS_HEIGHT 1.0 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
-  #define SHORT_GRASS_HEIGHT 1.0 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
+  #define BASE_GRASS_HEIGHT 0.75 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0]
+  #define SHORT_GRASS_HEIGHT 1.25 // [0.75 0.8 0.85 0.9 0.95 1.0 1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.15 2.2 2.25]
   #define REPLACE_SHORT_GRASS 1 // [0 1 2]
   #define GRASS_DETECT_FALLOFF
   #define GRASS_DETECT_INV_FALLOFF
-  #define GRASS_DENSITY 2 // [1 2 3 4 5]
+  #define GRASS_DENSITY 4 // [1 2 3 4 5]
   #define GRASS_QUALITY 2 // [0 1 2]
-  #define GRASS_RANGE 40.0 // [10.0 12.5 15.0 17.5 20.0 22.5 25.0 27.5 30.0 32.5 35.0 37.5 40.0 42.5 45.0 47.5 50.0 60.0 70.0 80.0 90.0 100.0]
-  #define GRASS_WAVY_STRENGTH 1.0 // [0.0 0.1 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]
+  #define GRASS_RANGE 40.0 // [8.0 16.0 24.0 32.0 40.0 48.0 56.0 64.0 72.0 80.0 88.0 96.0 104.0 112.0 120.0 128.0]
+  #define GRASS_WAVY_STRENGTH 1.5 // [0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0]
   #define WAVING_MULTIPART_GRASS
   #define GRASS_RANDOMNESS 0.5 // [0.0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
 
