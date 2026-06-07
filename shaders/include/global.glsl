@@ -73,6 +73,20 @@
 #define GRASS_GRID 6
 #endif
 
+// Shader Grass bushiness: blocks holding vanilla short_grass make the shader grass on and around
+// them taller. The spread is a FIXED GRASS_BUSHINESS_REACH blocks, DECOUPLED from
+// SHORT_GRASS_HEIGHT (the slider sets how TALL the boost is; the reach stays put) - so dense
+// short_grass can't turn the whole field tall. The proximity falloff is BAKED once per voxel cell
+// by the grass_bushiness compute pass (program/grass_bushiness.csh, a world0 shadowcomp) and read
+// O(1) per blade in the terrain GS - NOT scanned per blade (that cost hundreds of voxel reads per
+// block inside the GS, which tanked FPS). The dynamic scan auto-widens with the reach, so raising
+// it later (e.g. a wider spread for tall grass) costs more bake but never GS perf.
+// GRASS_BUSHINESS_MAX_CELLS caps the scan half-width; GRASS_BUSHINESS_DYNAMIC_SCAN scans out to
+// ceil(reach) (variable loop) vs the fixed unrolled MAX_CELLS box.
+#define GRASS_BUSHINESS_REACH 1.5
+#define GRASS_BUSHINESS_MAX_CELLS 6
+#define GRASS_BUSHINESS_DYNAMIC_SCAN // comment out -> fixed (unrolled) scan box
+
 // Shader Grass camera mask (PROCEDURAL_GEOMETRY_MODE 4): side length of the per-face mask image,
 // DECOUPLED from VOXEL_VOLUME_SIZE (the LPV) on purpose. The mask is addressed world-index-mod-
 // SIZE, so two cells SIZE apart collide. Writes span +/-(GRASS_RANGE+1); reads are bounded by the

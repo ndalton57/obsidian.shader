@@ -54,15 +54,14 @@ const float wetnessHalflife         = 70.0;
   // Saturation boost for the shader-grass BLADES only (not the grass block). 1.0 = no
   // change; higher = more vibrant blades.
   #define GRASS_VIBRANCY 1.20 // [0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 1.05 1.10 1.15 1.20 1.25 1.30 1.35 1.40 1.45 1.50 1.55 1.60 1.65 1.70 1.75 1.80 1.85 1.90 1.95 2.00]
-  #define SHORT_GRASS_HEIGHT 1.25 // [0.75 0.8 0.85 0.9 0.95 1.0 1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.15 2.2 2.25]
-  #define REPLACE_SHORT_GRASS 1 // [0 1 2]
-  #define GRASS_DETECT_FALLOFF
-  #define GRASS_DETECT_INV_FALLOFF
-  #define GRASS_DENSITY 4 // [1 2 3 4 5]
-  #define GRASS_QUALITY 2 // [0 1 2]
-  #define GRASS_RANGE 40.0 // [8.0 16.0 24.0 32.0 40.0 48.0 56.0 64.0 72.0 80.0 88.0 96.0 104.0 112.0 120.0 128.0]
-  #define GRASS_WAVY_STRENGTH 1.5 // [0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0]
-  #define WAVING_MULTIPART_GRASS
+  // How much taller the shader grass grows on/around blocks holding vanilla short_grass
+  // (1.0 = same as normal grass). Only the HEIGHT - the spread radius is fixed
+  // (GRASS_BUSHINESS_REACH in global.glsl), so this does not change how far the boost reaches.
+  #define SHORT_GRASS_HEIGHT 1.75 // [1.0 1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.15 2.2 2.25 2.3 2.35 2.4 2.45 2.5]
+  #define GRASS_DENSITY 3 // [1 2 3 4 5]
+  #define GRASS_QUALITY 1 // [0 1 2]
+  #define GRASS_RANGE 64.0 // [8.0 16.0 24.0 32.0 40.0 48.0 56.0 64.0 72.0 80.0 88.0 96.0 104.0 112.0 120.0 128.0]
+  #define GRASS_WAVY_STRENGTH 1.75 // [0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0]
   #define GRASS_RANDOMNESS 0.5 // [0.0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
 
 //#define EDGE_HIGHLIGHT

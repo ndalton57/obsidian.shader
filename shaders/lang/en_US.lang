@@ -110,7 +110,7 @@ option.BASE_GRASS_HEIGHT.comment       = Overall height of the grass blades
 option.GRASS_VIBRANCY                  = Grass Vibrancy
 option.GRASS_VIBRANCY.comment          = Saturation of the 3D shader-grass blades (the blades only, not the grass block). 1.0 leaves them as-is; higher makes them more vibrant/lush, lower desaturates them
 option.SHORT_GRASS_HEIGHT              = Short Grass Height
-option.SHORT_GRASS_HEIGHT.comment      = Height cap used for shorter grass
+option.SHORT_GRASS_HEIGHT.comment      = How much taller the shader grass grows on and around blocks that have short grass (1.0 = same as normal grass). Higher = taller, not wider (the spread radius is fixed)
 option.GRASS_BASE_THICKNESS            = Blade Thickness
 option.GRASS_BASE_THICKNESS.comment    = Width of each blade at its base
 option.GRASS_THICKNESS_FALLOFF         = Thickness Falloff
@@ -119,16 +119,8 @@ option.GRASS_WAVY_STRENGTH             = Wave Strength
 option.GRASS_WAVY_STRENGTH.comment     = How strongly blades sway in the wind. 0 = still
 option.GRASS_RANDOMNESS                = Randomness
 option.GRASS_RANDOMNESS.comment        = How much blades randomly lean / vary
-option.REPLACE_SHORT_GRASS             = Replace Short Grass
-option.REPLACE_SHORT_GRASS.comment     = How placed short grass is handled (0/1/2). (Not wired up yet.)
-option.GRASS_DETECT_FALLOFF            = Edge Falloff
-option.GRASS_DETECT_FALLOFF.comment    = Shorter grass at the edge of grass patches. (Not wired up yet.)
-option.GRASS_DETECT_INV_FALLOFF        = Inverse Edge Falloff
-option.GRASS_DETECT_INV_FALLOFF.comment = Companion to Edge Falloff. (Not wired up yet.)
-option.WAVING_MULTIPART_GRASS          = Waving Tall Grass
-option.WAVING_MULTIPART_GRASS.comment  = Wave 2-block-tall grass as one piece. (Not wired up yet in this port.)
 suffix.BASE_GRASS_HEIGHT               = m
-suffix.SHORT_GRASS_HEIGHT              = m
+suffix.SHORT_GRASS_HEIGHT              = x
 suffix.GRASS_RANGE                     = m
 option.SLANTED_RAIN                    = Slanted Rain
 option.SLANTED_RAIN.comment            = Slanted rain particles. Makes rainy weather a little more atmospheric

@@ -107,7 +107,7 @@ uniform vec2 taa_offset;
 // ------------
 
 // Read Photon's world voxel buffer to find where vanilla short_grass sits, so we
-// can grow taller/bushier grass there (REPLACE_SHORT_GRASS / DETECT_FALLOFF).
+// can grow taller/bushier grass there (SHORT_GRASS_HEIGHT bushiness boost).
 // Only available with Colored Lights on (that's what builds the voxel volume);
 // degrades gracefully to uniform grass otherwise.
 #ifdef COLORED_LIGHTS
@@ -144,10 +144,20 @@ uint grass_read_voxel(vec3 scene_p) {
     return texelFetch(voxel_sampler, ivec3(vp), 0).x & 127u;
 }
 
-// 1.0 if a small plant (short_grass etc., material 2) occupies the block.
-float read_short_grass(vec3 scene_p) {
-    return grass_read_voxel(scene_p) == 2u ? 1.0 : 0.0;
+#ifdef SHADER_GRASS
+// Shader Grass: the baked bushiness influence field (filled by program/grass_bushiness.csh).
+// One value per voxel cell = the grass-height boost spread out from nearby vanilla
+// short_grass, so the blade path reads it with one lookup instead of scanning per blade.
+uniform sampler3D grass_bushiness_sampler;
+
+float grass_bushiness_at(ivec3 cell) {
+    if (any(lessThan(cell, ivec3(0)))
+        || any(greaterThanEqual(cell, voxel_volume_size))) {
+        return 0.0;
+    }
+    return texelFetch(grass_bushiness_sampler, cell, 0).x;
 }
+#endif
 #endif
 
 // ------------
@@ -296,14 +306,18 @@ void emit_passthrough(bool grower) {
 }
 
 #ifndef PROGRAM_GBUFFERS_TERRAIN_SOLID
-// Cutout short_grass re-emit: scale the plant's height by SHORT_GRASS_HEIGHT (height knob) times
-// the distance factor `h` (1 = full, 0 = flat), so it SHRINKS into the ground with distance as the
-// block-top blades take over. Re-projects from scene space - fine for this billboard (the
-// re-projection acne worry is only the tessellated SOLID ground); the base vert stays put, so no
-// z-fight at the root.
+// Cutout short_grass re-emit: re-emit the vanilla short_grass billboard at a FIXED height,
+// scaled only by the distance factor `h` (1 = full, 0 = flat) so it SHRINKS into the ground
+// with distance as the block-top blades take over. The SHORT_GRASS_HEIGHT slider drives ONLY
+// the shader-grass blades (their bushiness boost), NOT this decal - the decal's height never
+// changes with the slider. Re-projects from scene space - fine for this billboard (the
+// re-projection acne worry is only the tessellated SOLID ground); the base vert stays put, so
+// no z-fight at the root.
 void emit_short_grass_scaled(float h) {
+    // Fixed decal height (NOT the SHORT_GRASS_HEIGHT slider - see above).
+    const float decal_height = 1.25;
     float base_y = min(v_in[0].scene_pos.y, min(v_in[1].scene_pos.y, v_in[2].scene_pos.y));
-    float scale = SHORT_GRASS_HEIGHT * h; // height knob x distance shrink
+    float scale = decal_height * h; // fixed decal height x distance shrink
     for (int i = 0; i < 3; ++i) {
         v_out.uv = v_in[i].uv;
         vec3 sp = v_in[i].scene_pos;
@@ -456,18 +470,9 @@ void main() {
     vec3 clump = vec3(tri_center.x, min_y, tri_center.z); // planted on the ground
 
 #ifdef COLORED_LIGHTS
-    // Block center (scene) + precise world-space position + integer block index, for the
-    // raw blade placement below and the bushiness scan. block_center is exact (from
-    // at_midBlock), so floor() of its world pos is wobble-free (CLAUDE.md gotcha #5).
+    // Block center (scene), for the raw blade placement below and to look up the baked
+    // bushiness field. block_center is exact (from at_midBlock).
     vec3 bc = v_in[0].block_center;
-    vec3 bw;
-    if (distance(vec3(cameraPositionInt) + cameraPositionFract, cameraPosition)
-        < 1.0) {
-        bw = bc + cameraPositionFract + vec3(cameraPositionInt);
-    } else {
-        bw = bc + cameraPosition;
-    }
-    ivec3 blk_idx = ivec3(floor(bw));
 
 #if PROCEDURAL_GEOMETRY_MODE >= 2
     // RAW TESSELLATION placement: one blade per sub-triangle at its own position (no
@@ -590,32 +595,31 @@ void main() {
 
     // Grass-block tops: tall, thin blades (density comes from tessellation).
     float height = 0.65 * BASE_GRASS_HEIGHT;
-#ifdef COLORED_LIGHTS
-    // Bushiness (taller grass) radiates outward from blocks that have vanilla
-    // short_grass, tapering smoothly across the neighbours (Eclipse's
-    // GRASS_DETECT_FALLOFF). Scan the 3x3 block neighbourhood: each block that
-    // holds short_grass (read 0.6 above its surface, where short_grass sits)
-    // contributes a boost that falls off with distance from this blade, out to
-    // ~1.8 blocks. The short_grass itself is hidden by the cutout program.
-    // Choose the 3x3 neighbours by the STABLE integer block index (blk_idx), NOT
-    // floor() of the blade's world xz: a blade landing on an integer xz made
-    // floor() wobble under sub-pixel camera motion, so the short_grass scan (and
-    // thus the height) flickered on some blocks near flowers/short_grass
-    // (gotcha #5). Each voxel read lands at a neighbour's block-above CENTER (where
-    // short_grass sits) - mid-cell, so the read itself is stable too.
-    vec2 pw = stable_world.xz;       // blade world xz (continuous -> smooth falloff)
-    float bushiness = 0.0;
-    for (int dx = -1; dx <= 1; ++dx) {
-        for (int dz = -1; dz <= 1; ++dz) {
-            vec3 nb_scene = bc + vec3(float(dx), 1.0, float(dz));
-            float sg = read_short_grass(nb_scene);
-            vec2 nb_world = vec2(float(blk_idx.x) + 0.5 + float(dx),
-                                 float(blk_idx.z) + 0.5 + float(dz));
-            float falloff = 1.0 - smoothstep(0.5, 1.8, length(pw - nb_world));
-            bushiness = max(bushiness, sg * falloff);
-        }
+#if defined COLORED_LIGHTS && defined SHADER_GRASS
+    // Bushiness: grass grows taller on and around blocks holding vanilla short_grass.
+    // SHORT_GRASS_HEIGHT (>= 1.0) is the only knob - full boost at the short_grass block,
+    // fading to zero over a reach that scales with the boost (taller -> farther). The
+    // whole spread is BAKED per voxel cell by program/grass_bushiness.csh (a fixed falloff
+    // curve, computed once per cell), so here it is a single field lookup - NOT a per-blade
+    // neighbour scan (that ran hundreds of times per block in the GS and tanked FPS). Read
+    // it BILINEAR in XZ at the short-grass cell layer above this block -> a smooth per-blade
+    // falloff with no block-to-block step. (Nearest in Y: the boost is a horizontal spread,
+    // and y-interpolation would just dilute it against the empty layers above/below.)
+    float boost = SHORT_GRASS_HEIGHT - 1.0; // extra height fraction (0 at neutral 1.0)
+    if (boost > 0.0) {
+        vec3 vp = scene_to_voxel_space(vec3(clump.x, bc.y + 1.0, clump.z));
+        int vy = int(vp.y);              // short-grass cell layer (one above the block)
+        vec2 fxz = vp.xz - 0.5;          // cell-CENTRE alignment for the interpolation
+        ivec2 i0 = ivec2(floor(fxz));
+        vec2 f = fract(fxz);
+        float influence = mix(
+            mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y)),
+                grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y)), f.x),
+            mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y + 1)),
+                grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y + 1)), f.x),
+            f.y);
+        height *= 1.0 + boost * influence; // up to SHORT_GRASS_HEIGHT x at the block
     }
-    height *= mix(1.0, 1.5, bushiness); // half again as tall at full bushiness
 #endif
     // Smooth LOD fade near GRASS_RANGE: blades shrink to nothing instead of
     // POPPING at the hard distance cutoff. This is the whole-patch pop-in - the
