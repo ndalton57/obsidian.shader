@@ -17,12 +17,13 @@ vec2 air_fog_density(vec3 world_pos) {
     // fraction of any world and always sits low. The dense base stays anchored, so
     // this never thins it - only how fast it fades upward changes.
     vec2 mul = -rcp(bedrock_fog_half_life());
-    vec2 add = -mul * air_fog_falloff_start;
+    vec2 add = -mul * air_fog_falloff_start();
 
     vec2 density = exp2(min(world_pos.y * mul + add, 0.0));
 
-    // fade away below sea level
-    density *= linear_step(air_fog_volume_bottom, SEA_LEVEL, world_pos.y);
+    // fade in from the floor up (the world's bedrock level for the bedrock fog,
+    // sea level otherwise)
+    density *= linear_step(air_fog_volume_bottom(), air_fog_anchor(), world_pos.y);
 
 #ifdef AIR_FOG_CLOUDY_NOISE
     const vec3 wind = 0.0003 * vec3(1.0, 0.0, 0.7);
@@ -59,12 +60,12 @@ mat2x3 raymarch_air_fog(
     shadow_dir = diagonal(shadowProjection).xyz * shadow_dir;
 
     float distance_to_lower_plane
-        = (air_fog_volume_bottom - eyeAltitude) / world_dir.y;
+        = (air_fog_volume_bottom() - eyeAltitude) / world_dir.y;
     float distance_to_upper_plane
         = (air_fog_volume_top - eyeAltitude) / world_dir.y;
     float distance_to_volume_start, distance_to_volume_end;
 
-    if (eyeAltitude < air_fog_volume_bottom) {
+    if (eyeAltitude < air_fog_volume_bottom()) {
         // Below volume
         distance_to_volume_start = distance_to_lower_plane;
         distance_to_volume_end

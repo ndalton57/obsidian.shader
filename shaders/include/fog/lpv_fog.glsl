@@ -20,12 +20,13 @@ vec2 overworld_fog_density_no_noise(vec3 position_world) {
     // Dissipation rate scaled to world height for the bedrock fog (see
     // bedrock_fog_half_life), matching the air fog.
     vec2 mul = -rcp(bedrock_fog_half_life());
-    vec2 add = -mul * air_fog_falloff_start;
+    vec2 add = -mul * air_fog_falloff_start();
 
     vec2 density = exp2(min(position_world.y * mul + add, 0.0));
 
-    // fade away below sea level
-    density *= linear_step(air_fog_volume_bottom, SEA_LEVEL, position_world.y);
+    // fade in from the floor up (the world's bedrock level for the bedrock fog,
+    // sea level otherwise)
+    density *= linear_step(air_fog_volume_bottom(), air_fog_anchor(), position_world.y);
 
     return density * (0.5 * OVERWORLD_FOG_INTENSITY);
 }

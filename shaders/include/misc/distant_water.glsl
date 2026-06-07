@@ -1,6 +1,7 @@
 #if !defined INCLUDE_MISC_DISTANT_WATER
 #define INCLUDE_MISC_DISTANT_WATER
 
+#include "/include/lighting/shadows/common.glsl"
 #include "/include/lighting/specular_lighting.glsl"
 #include "/include/misc/purkinje_shift.glsl"
 #include "/include/surface/water_normal.glsl"
@@ -85,6 +86,18 @@ vec4 draw_distant_water(
     }
 #endif
 
+    // Light Leak Fix (mode 2): distant / LoD water (Distant Horizons + Voxy) has
+    // its own sun glint and sky/sun reflection below, neither of which was gated by
+    // the close-up cave-water fix (gbuffers_all_translucent), so the sun still
+    // showed on Voxy/DH water underground. Fold the player's sky exposure
+    // (eye_skylight) into the water's skylight to cancel the sun in caves: ~1 on the
+    // surface (no-op), ~0 deep in a cave. Gates both the glint and the reflection.
+    float light_leak_prevention = 1.0;
+#if defined WORLD_OVERWORLD || defined WORLD_END
+    light_leak_prevention
+        = get_lightmap_light_leak_prevention(light_levels.y, eye_skylight);
+#endif
+
     // Specular highlight
 
 #if (defined WORLD_OVERWORLD || defined WORLD_END)
@@ -97,7 +110,7 @@ vec4 draw_distant_water(
 
     water_color.rgb
         += get_specular_highlight(water_material, NoL, NoV, NoH, LoV, LoH)
-        * light_color * cloud_shadows * fog_visibility;
+        * light_color * cloud_shadows * fog_visibility * light_leak_prevention;
 #endif
 
     // Specular reflections
@@ -115,7 +128,7 @@ vec4 draw_distant_water(
                flat_normal,
                direction_world,
                direction_world * new_tbn,
-               light_levels.y,
+               light_levels.y * light_leak_prevention,
                true
            )
         * fog_visibility;

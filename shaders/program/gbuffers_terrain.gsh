@@ -9,8 +9,9 @@
   option set are tuned to keep the blades thin and natural-looking.
 
   Two terrain programs include this GS:
-   - CUTOUT  (gbuffers_terrain): grows blades on Tachyon's small green plants and
-     REPLACES the original plant quad. POM is off here (small varying block).
+   - CUTOUT  (gbuffers_terrain): does NOT grow blades - it re-emits each small green
+     plant (short grass) as a height-scaled quad that shrinks with distance to blend
+     into the solid block-top blades; flowers pass through. POM is off (small block).
    - SOLID   (gbuffers_terrain_solid, PROGRAM_GBUFFERS_TERRAIN_SOLID): grows
      blades on every grass-BLOCK top (material_mask == MATERIAL_GRASS_BLOCK,
      face pointing up, within GRASS_RANGE) while PASSING THE GROUND THROUGH.
@@ -24,6 +25,9 @@
 
 #include "/include/global.glsl"
 #include "/include/misc/material_masks.glsl"
+#if defined CHERRY_GROVE_PINK_GRASS
+#include "/include/misc/cherry_grove.glsl"
+#endif
 
 // Keep POM only on the SOLID program; the cutout program drops it (see the
 // matching guards in gbuffers_all_solid.vsh/.fsh) so the varying block stays
@@ -32,16 +36,16 @@
 #undef POM
 #endif
 
-// Blade vertex budget: (vertices) * (components per vertex) must stay under the
-// GL geometry total-output-component limit (~1024). The SOLID block also carries
-// the POM varyings (~+9 comps) AND must emit the ground triangle, so it gets a
-// smaller cap; the CUTOUT block is leaner and only emits blades.
+// Vertex budget: (vertices) * (components per vertex) must stay under the GL geometry
+// total-output-component limit (~1024). SOLID emits the ground triangle plus one blade
+// (and carries the POM varyings, ~+9 comps). CUTOUT only re-emits a single (scaled) quad
+// or passes the triangle through, so it needs just 3.
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 24) out;
 #else
 layout(triangles) in;
-layout(triangle_strip, max_vertices = 35) out; // bushy tuft: 5 blades x 7 verts
+layout(triangle_strip, max_vertices = 3) out;
 #endif
 
 in GrassVertex {
@@ -166,17 +170,11 @@ float read_short_grass(vec3 scene_p) {
 #define GRASS_BLADES 1
 #endif
 
-// Solid program: tessellation supplies density, so one (full-detail) blade per
-// sub-triangle. Cutout program: replace each placed plant with a BUSHY TUFT -
-// several blades so it reads as a thicker clump that breaks up the uniform field
-// (REPLACE_SHORT_GRASS feel). Fewer segments per blade there to fit the budget.
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+// One (full-detail) blade per sub-triangle; tessellation supplies the field density.
+// Blades are grown by the SOLID program only (the cutout re-emits scaled short-grass
+// quads instead), but both programs compile emit_blade, so define these for both.
 #define BLADE_COUNT 1
 #define BLADE_SEGMENTS GRASS_SEGMENTS
-#else
-#define BLADE_COUNT 5
-#define BLADE_SEGMENTS 3
-#endif
 
 // Blade base half-width. Blades are thin (full width ~0.045 block at the
 // default thickness); a wide blade reads as a leaf, not grass.
@@ -450,14 +448,14 @@ void main() {
     return;
 #endif
 
-    // ---- Generate grass blades ----
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    // ---- Generate grass blades (solid grass-block tops only) ----
 
     vec3 tri_center = (p0 + p1 + p2) * (1.0 / 3.0);
     float min_y = min(p0.y, min(p1.y, p2.y));
-    float max_y = max(p0.y, max(p1.y, p2.y));
     vec3 clump = vec3(tri_center.x, min_y, tri_center.z); // planted on the ground
 
-#if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined COLORED_LIGHTS
+#ifdef COLORED_LIGHTS
     // Block center (scene) + precise world-space position + integer block index, for the
     // raw blade placement below and the bushiness scan. block_center is exact (from
     // at_midBlock), so floor() of its world pos is wobble-free (CLAUDE.md gotcha #5).
@@ -502,7 +500,7 @@ void main() {
         clump = vec3(bmin.x + f.x, bc.y + 0.5, bmin.z + f.y);
     }
 #endif // PROCEDURAL_GEOMETRY_MODE >= 2
-#endif // PROGRAM_GBUFFERS_TERRAIN_SOLID && COLORED_LIGHTS
+#endif // COLORED_LIGHTS
 
     vec4 src_tint = v_in[0].tint;
     vec2 gll = v_in[0].light_levels;
@@ -517,18 +515,18 @@ void main() {
         stable_world = clump + cameraPosition;
     }
 
-#if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined COLORED_LIGHTS \
-    && PROCEDURAL_GEOMETRY_MODE >= 2
-    // PERFECT, MOVEMENT-STABLE BLADE COLOUR.
-    // The blade colour must NOT depend on which face Sodium submitted, or it would
-    // change as the camera crosses the top<->side cull transition. So read the
-    // grass-block TOP's own tint from the per-block buffer the shadow pass fills
-    // every frame, and sample the shared grass_top atlas tile. These inputs are
-    // identical for top- and side-grown blades -> the transition is a colour no-op,
-    // and since the value is the literal top gl_Color it tracks biomes and
-    // biome-blend mods exactly. The cell math MUST match update_grass_tint (same
-    // 256 window, same floor(cameraPosition.xz), same +128 centre).
-    {
+#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
+    // Blade colour by grower face. A SIDE grower's own gl_Color/uv are the grass-block
+    // dirt side (untinted), not the green top, so side-grown blades borrow the top's
+    // tint + grass_top tile from the per-block buffer the shadow pass fills. TOP growers
+    // already carry the correct top gl_Color and grass_top uv in v_in, so they use those
+    // directly. The buffer stores the top's gl_Color, so both paths land on the same
+    // colour where a block's grower switches top<->side under camera motion (no pop).
+    // Top growers also sidestep the buffer's camera-relative cell, which is refreshed
+    // only in the shadow pass and can return a stale neighbour cell while the player
+    // translates -> a whole-blade colour flicker. The cell math MUST match
+    // update_grass_tint (same 256 window, same floor(cameraPosition.xz), same +128).
+    if (abs(v_in[0].tbn[2].y) < 0.5) { // side grower: borrow the top's colour
         vec3 cw = bc + cameraPosition; // block-center world, matching the shadow pass
         ivec2 tcell = ivec2(floor(cw.xz) - floor(cameraPosition.xz)) + 128;
         if (all(greaterThanEqual(tcell, ivec2(0)))
@@ -538,27 +536,51 @@ void main() {
                 src_tint.rgb = top_tint;
                 vec4 tile = texelFetch(grass_tile_sampler, ivec2(0), 0);
                 if (tile.z > 1e-4 && tile.w > 1e-4) {
-                    // Sample the REAL grass_top texture (blades stay textured like
-                    // the block, not flat) at a world-stable per-blade point in the
-                    // tile -> keeps natural blade-to-blade variation, never flickers,
-                    // and is the same function for every grower (no transition pop).
-                    vec2 jt = fract(vec2(
-                        grass_hash(dot(stable_world, vec3(0.137, 0.071, 0.713))),
-                        grass_hash(dot(stable_world, vec3(0.713, 0.137, 0.071)))));
+                    // Sample the REAL grass_top texture (blades stay textured like the
+                    // block, not flat) at a per-blade point in the tile -> natural
+                    // blade-to-blade variation, same for every grower (no transition
+                    // pop). The hash input MUST come from the Iris SPLIT camera so it is
+                    // frame-stable: the EXACT integer world block index is a constant
+                    // term and only the precise sub-block fraction varies per blade.
+                    // Hashing the collapsed world float (clump + cameraPositionInt +
+                    // cameraPositionFract) let grass_hash amplify that float's ~1-ULP
+                    // camera-motion wobble into a whole-blade colour flicker that
+                    // worsened with distance from spawn.
+                    vec2 rel_xz = clump.xz + cameraPositionFract.xz;
+                    vec2 iworld = vec2(cameraPositionInt.xz) + floor(rel_xz);
+                    vec2 fworld = fract(rel_xz); // sub-block [0,1), precise
+                    float hseed = dot(iworld, vec2(0.137, 0.713))
+                        + dot(fworld, vec2(0.071, 0.911));
+                    vec2 jt = fract(vec2(grass_hash(hseed),
+                                         grass_hash(hseed + 19.19)));
                     guv = tile.xy + tile.zw * jt;
                 }
             }
         }
     }
 #endif
-#ifndef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    // Cutout plants only: per-cluster hash seed from the BLOCK the grass sits on.
-    // Offsetting y by -0.5 before floor() keeps it stable for tops that sit on an
-    // integer y (otherwise sub-block precision wobble flips floor() and flickers).
-    // The solid path uses continuous noise instead (see the blade loop).
-    vec3 seed_cell = vec3(stable_world.x, stable_world.y - 0.5, stable_world.z);
-    float seed = grass_hash(dot(floor(seed_cell), vec3(12.9898, 78.233, 37.719)));
+
+#ifdef CHERRY_GROVE_PINK_GRASS
+    // Cherry grove: dither THIS blade fully pink or fully its biome green, per blade.
+    // The dither key MUST be the split-camera world position (exact integer index
+    // cameraPositionInt + precise fraction), NOT the collapsed stable_world.xz: that
+    // single float wobbles ~1 ULP as the camera moves and cherry_grove_dither (a hash)
+    // amplifies the wobble, flipping the pink/green pick at the biome border while moving
+    // (worse far from spawn). See CLAUDE.md (split-camera dither/hash key). Per-blade (not
+    // per-block) makes a transition block sprout a MIX of pink and green blades. src_tint
+    // is the grass-block top's colour (own gl_Color for a top grower, or the shadow-pass
+    // buffer for a side grower) - the one place a blade's colour is set.
+    ivec2 cg_key = cameraPositionInt.xz * 256
+        + ivec2(floor((clump.xz + cameraPositionFract.xz) * 256.0));
+    src_tint.rgb = cherry_grove_pink_grass(
+        src_tint.rgb, v_in[0].material_mask, cherry_grove_dither(vec2(cg_key))
+    );
 #endif
+
+    // Vibrancy: saturate the blade colour (the blades only, not the grass block). 1.0 =
+    // unchanged. Applied after any cherry recolor, so it lifts the final blade hue.
+    float grass_vib_luma = dot(src_tint.rgb, vec3(0.2126, 0.7152, 0.0722));
+    src_tint.rgb = max(mix(vec3(grass_vib_luma), src_tint.rgb, GRASS_VIBRANCY), 0.0);
 
     // Randomness from noisetex at the world position
     vec2 wxz = stable_world.xz;
@@ -566,7 +588,6 @@ void main() {
         = 2.0 * (texture(noisetex, 0.75 * wxz).xy + texture(noisetex, 0.35 * wxz.yx).xy)
         - 1.0;
 
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
     // Grass-block tops: tall, thin blades (density comes from tessellation).
     float height = 0.65 * BASE_GRASS_HEIGHT;
 #ifdef COLORED_LIGHTS
@@ -603,12 +624,6 @@ void main() {
     // reaches 0 by GRASS_RANGE, where detection culls anyway, so no visible step.
     // (Eclipse has this same bug - identical hard cutoff with no fade.)
     height *= 1.0 - smoothstep(GRASS_RANGE * 0.8, GRASS_RANGE, length(clump));
-#else
-    // Cutout plants: taller tuft so it stands above the block-top grass and
-    // reads as a thicker clump. Still capped to not wildly out-grow the quad.
-    float height = 0.8 * BASE_GRASS_HEIGHT;
-    height = min(height, (max_y - min_y) + 0.5 * SHORT_GRASS_HEIGHT);
-#endif
 
     // Player-proximity outward bend: grass within ~1 block of the camera xz
     // splays away from you - it parts as you walk through, and (because the
@@ -622,7 +637,6 @@ void main() {
         = vec3(player_dir.x, 0.0, player_dir.y) * player_prox * 0.35;
 
     for (int b = 0; b < BLADE_COUNT; ++b) {
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
         // Tessellation supplies density (one blade per sub-triangle); ALL the
         // per-blade variation comes from CONTINUOUS noise sampled at the precise
         // world position, so it varies naturally yet never flickers when moving
@@ -647,18 +661,6 @@ void main() {
 
         vec3 lean = vec3(rnd.x, 0.0, rnd.y) * GRASS_RANDOMNESS * 0.35;
         float bh = height * (0.8 + 0.5 * hgt);
-#else
-        // Cutout plants: a few hashed blades per quad (seed is block-stable).
-        float h1 = grass_hash(seed + float(b) * 19.19);
-        float h2 = grass_hash(seed + float(b) * 7.37 + 4.0);
-        float h3 = grass_hash(seed + float(b) * 3.71 + 9.0);
-
-        vec3 blade_offset = vec3((h1 - 0.5) * 0.4, 0.0, (h2 - 0.5) * 0.4);
-        vec3 right = vec3(cos(h3 * 6.2831853), 0.0, sin(h3 * 6.2831853));
-        vec3 lean = vec3(random_dir.x, 0.0, random_dir.y) * GRASS_RANDOMNESS
-            * 0.35 * (0.6 + 0.8 * h1);
-        float bh = height * (0.75 + 0.5 * h1);
-#endif
         lean += player_push; // bend tips away from the player (curve-weighted)
 
         vec3 root = clump + blade_offset;               // scene space (project)
@@ -666,4 +668,5 @@ void main() {
 
         emit_blade(root, world_root, bh, right, lean, src_tint, guv, gll);
     }
+#endif // PROGRAM_GBUFFERS_TERRAIN_SOLID
 }

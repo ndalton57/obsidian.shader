@@ -1,12 +1,26 @@
 #include "/include/global.glsl"
 #include "/include/utility/encoding.glsl"
+#if defined CHERRY_GROVE_PINK_GRASS && defined WORLD_OVERWORLD
+#include "/include/misc/cherry_grove.glsl"
+#endif
 
 layout(location = 0) out vec4 gbuffer_data_0;
 
 void voxy_emitFragment(VoxyFragmentParameters parameters) {
     // Get base properties
 
-    vec3 base_color = parameters.sampledColour.rgb * parameters.tinting.rgb;
+    uint material_mask = max(parameters.customId - 10000u, 0u);
+
+    vec3 tinting = parameters.tinting.rgb;
+#if defined CHERRY_GROVE_PINK_GRASS && defined WORLD_OVERWORLD
+    // Cherry grove pink on Voxy LoD terrain - matches the close-up terrain so distant
+    // chunks don't POP green->pink as they load in. No dither at this range: a hard
+    // pink/green switch at the biome midpoint (dither arg 0.5), riding Minecraft's own
+    // per-block grass-colour blend for the border. Cheap: one colour test per fragment.
+    tinting = cherry_grove_pink_grass(tinting, material_mask, 0.5);
+#endif
+
+    vec3 base_color = parameters.sampledColour.rgb * tinting;
 
     // from Cortex
     vec3 normal = vec3(
@@ -15,8 +29,6 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
                       uint((parameters.face >> 1) == 1)
                   )
         * (float(int(parameters.face) & 1) * 2.0 - 1.0);
-
-    uint material_mask = max(parameters.customId - 10000u, 0u);
 
     // Encode gbuffer data
 

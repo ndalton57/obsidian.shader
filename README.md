@@ -24,7 +24,7 @@
 * <details open>
   <summary>Shader Grass</summary>
   
-  <img src="docs/images/shader.grass.png" title="Entire geometry shader pipeline ported from Eclipse shaders, a fork of Bliss shaders">
+  <img src="docs/images/shader.grass.png" title="Initial geometry shader pipeline ported from Eclipse shaders, a fork of Bliss shaders">
   
 
 </details>
@@ -33,7 +33,10 @@
 
 ## Credit
 
-Tachyon is a fork of [Photon](https://github.com/sixthsurge/photon) by [SixthSurge](https://github.com/sixthsurge).
+This shader pack is basically just me combining a bunch of my favorite shader features into one pack, and then making improvements, so the real credit goes to all these shaders:
+
+- Tachyon is a fork of [Photon](https://github.com/sixthsurge/photon) by [SixthSurge](https://github.com/sixthsurge)
+- Original Shader Grass and GS pipeline implimentation was ported from [Eclipse Shaders](https://github.com/Merlin1809/Eclipse-Shader)
 
 ## License
 

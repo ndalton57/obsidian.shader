@@ -113,6 +113,11 @@ uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
 
 uniform vec3 cameraPosition;
+#if defined CHERRY_GROVE_PINK_GRASS && defined PROGRAM_GBUFFERS_TERRAIN
+// Iris split camera, for a frame-stable cherry-grove dither texel (see the recolor below).
+uniform ivec3 cameraPositionInt;
+uniform vec3 cameraPositionFract;
+#endif
 
 uniform float near;
 uniform float far;
@@ -147,6 +152,9 @@ uniform vec4 entityColor;
 
 #include "/include/misc/material_fix.glsl"
 #include "/include/misc/material_masks.glsl"
+#if defined CHERRY_GROVE_PINK_GRASS && defined PROGRAM_GBUFFERS_TERRAIN
+#include "/include/misc/cherry_grove.glsl"
+#endif
 #include "/include/utility/dithering.glsl"
 #include "/include/utility/encoding.glsl"
 #include "/include/utility/fast_math.glsl"
@@ -346,6 +354,32 @@ void main() {
         overlayColor
     );
     light_levels = clamp((light_levels - 1.0 / 32.0) * 32.0 / 30.0, 0.0, 1.0);
+#elif defined CHERRY_GROVE_PINK_GRASS && defined PROGRAM_GBUFFERS_TERRAIN
+    // Cherry grove: dither the grass block top, side fringe and short grass fully pink or
+    // fully their biome green, per TEXEL (1/16-block world cells, 3D so it works on every
+    // face). The solid shader-grass blades are dithered per-blade in the geometry shader,
+    // so skip them here (material 2 in the solid program is a blade; in the cutout program
+    // it is short grass, dither it).
+    vec4 cherry_tint = tint;
+    bool cherry_is_blade = false;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    cherry_is_blade = material_mask == MATERIAL_SMALL_PLANTS;
+#endif
+    if (!cherry_is_blade) {
+        // Stable per-texel key. Two things are load-bearing: (1) the Iris SPLIT camera
+        // (exact integer world texel cameraPositionInt*16 + precise sub-texel offset), so
+        // the collapsed world's ~1-ULP wobble can't flip floor() far from spawn; (2) the
+        // +0.5, because block FACES sit on integer world coords, which land EXACTLY on a
+        // *16 texel boundary - floor() there flips on the tiniest reconstruction wobble
+        // (top face under VERTICAL motion, a side under HORIZONTAL motion). +0.5 centres
+        // integer coords mid-cell, off the boundary. See CLAUDE.md gotchas #5 and #13.
+        ivec3 cherry_texel = cameraPositionInt * 16
+            + ivec3(floor((scene_pos + cameraPositionFract) * 16.0 + 0.5));
+        cherry_tint.rgb = cherry_grove_pink_grass(
+            cherry_tint.rgb, material_mask, cherry_grove_dither(vec3(cherry_texel))
+        );
+    }
+    base_color = read_tex(gtexture) * cherry_tint;
 #else
     base_color = read_tex(gtexture) * tint;
 #endif

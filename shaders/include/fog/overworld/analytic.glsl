@@ -16,7 +16,7 @@ vec2 air_fog_analytic_airmass(
     // Dissipation rate scaled to world height for the bedrock fog (see
     // bedrock_fog_half_life), so it matches the raymarched path.
     vec2 mul = -rcp(bedrock_fog_half_life());
-    vec2 add = -mul * air_fog_falloff_start;
+    vec2 add = -mul * air_fog_falloff_start();
 
     vec2 a = ray_origin_world.y * mul + add;
     vec2 p1 = exp2(ray_length * ray_direction_world.y * mul + a);
