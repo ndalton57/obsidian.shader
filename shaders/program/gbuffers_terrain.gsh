@@ -357,7 +357,10 @@ void emit_short_grass_scaled(float decal_height, float h) {
         sp.y = base_y + (sp.y - base_y) * scale; // pull the top toward the ground
         v_out.scene_pos = sp;
         v_out.tint = v_in[i].tint;
-        v_out.material_mask = v_in[i].material_mask;
+        // Re-emit dedicated short_grass (85) as MATERIAL_SMALL_PLANTS (2) so the fragment shader's
+        // shading and cherry-grove recolor treat it exactly as before the material split.
+        uint mm = v_in[i].material_mask;
+        v_out.material_mask = (mm == uint(MATERIAL_SHORT_GRASS)) ? uint(MATERIAL_SMALL_PLANTS) : mm;
         v_out.tbn = v_in[i].tbn;
         v_out.light_levels = v_in[i].light_levels;
         v_out.vanilla_ao = v_in[i].vanilla_ao;
@@ -441,15 +444,17 @@ void main() {
 #endif
     }
 #else
-    // Cutout small plants (Stage 1 behavior): greenish, ~vertical quad, in range.
-    if (v_in[0].material_mask == uint(MATERIAL_SMALL_PLANTS)) {
+    // Cutout grass. Material 85 is dedicated short_grass/fern -> ALWAYS grass (no colour test, so
+    // savanna's yellow grass is caught too). Material 2 (flowers + mod grasses) still needs the green
+    // + ~vertical test to tell mod grass from flowers. Either way it re-emits at SHORT_GRASS_HEIGHT
+    // and SHRINKS to 0 with distance on a grass block (cross-fade into the block-top blades).
+    if (v_in[0].material_mask == uint(MATERIAL_SHORT_GRASS)) {
+        make_grass = true;
+    } else if (v_in[0].material_mask == uint(MATERIAL_SMALL_PLANTS)) {
         vec3 t = v_in[0].tint.rgb;
         bool greenish = (t.g > t.r + 0.04) && (t.g > t.b + 0.04);
         vec3 face_n = cross(p1 - p0, p2 - p0);
         bool vertical = abs(normalize(face_n + vec3(0.0, 1e-6, 0.0)).y) < 0.5;
-        // Identify short_grass (greenish, ~vertical quad). It's re-emitted at SHORT_GRASS_HEIGHT
-        // scale; on a grass block it also SHRINKS to 0 with distance to cross-fade into the
-        // block-top shader grass. See CLAUDE.md.
         make_grass = greenish && vertical;
     }
 #endif
@@ -533,9 +538,9 @@ void main() {
 #if PROCEDURAL_GEOMETRY_MODE >= 2
     // RAW TESSELLATION placement: one blade per sub-triangle at its own position (no
     // grid), so the tessellator does distance LOD for free. The grower can be a SIDE, so
-    // relabel the sub-triangle's two in-plane coords onto the block TOP the same way for
-    // every face - grass always grows from the top plane. (Side and top tessellate
-    // differently, so blades JUMP when the grower swaps; see CLAUDE.md.)
+    // relabel the sub-triangle's two in-plane coords onto the block TOP - WINDING-AWARE (see
+    // below), so EVERY face lands its blades in the same top positions and a grower swap does
+    // NOT move them. grass always grows from the top plane.
     {
         vec3 bmin = bc - 0.5;
         vec3 an = abs(v_in[0].tbn[2]);
@@ -543,15 +548,23 @@ void main() {
         float xl = tri_center.x - bmin.x;
         float yl = tri_center.y - bmin.y;
         float zl = tri_center.z - bmin.z;
-        // Relabel the grower face's two in-plane axes onto the top's (X, Z) the
-        // SAME way for every face (a per-face flip would MIRROR opposite faces).
+        // Relabel the grower face's two in-plane axes onto the top's (X, Z). The blades must land in
+        // the SAME top positions whichever face grows them, so a top<->side swap (or a side<->side
+        // swap, once the election is first-come) doesn't MOVE them. Catch: Minecraft winds each face
+        // CCW-outward, which MIRRORS the in-plane HORIZONTAL axis between opposite faces (height is
+        // unaffected - up is up). The relabel uses actual interpolated positions, so it inherits that
+        // mirror: two of the four sides tessellate mirror-imaged vs the top and their blades JUMP on
+        // the swap (observed in-game: +Z and -X jump; -Z and +X already match). Un-mirror those two
+        // by reflecting their preserved-horizontal coord (1 - coord) so every face maps on identically.
         float fx, fz;
-        if (an.y > 0.5) {        // top / bottom -> X, Z
+        if (an.y > 0.5) {        // top / bottom: X,Z -> X,Z
             fx = xl; fz = zl;
-        } else if (an.x > 0.5) { // +/-X: Y,Z -> X,Z
-            fx = yl; fz = zl;
-        } else {                 // +/-Z: X,Y -> X,Z
-            fx = xl; fz = yl;
+        } else if (an.x > 0.5) { // +/-X face: height(Y) -> X, in-plane horizontal(Z) -> Z
+            fx = yl;
+            fz = (v_in[0].tbn[2].x < 0.0) ? (1.0 - zl) : zl; // -X's Z is the mirrored one
+        } else {                 // +/-Z face: in-plane horizontal(X) -> X, height(Y) -> Z
+            fx = (v_in[0].tbn[2].z > 0.0) ? (1.0 - xl) : xl; // +Z's X is the mirrored one
+            fz = yl;
         }
         vec2 f = clamp(vec2(fx, fz), 0.0, 1.0);
 
@@ -577,45 +590,31 @@ void main() {
     }
 
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
-    // Blade colour by grower face. A SIDE grower's own gl_Color/uv are the grass-block
-    // dirt side (untinted), not the green top, so side-grown blades borrow the top's
-    // tint + grass_top tile from the per-block buffer the shadow pass fills. TOP growers
-    // already carry the correct top gl_Color and grass_top uv in v_in, so they use those
-    // directly. The buffer stores the top's gl_Color, so both paths land on the same
-    // colour where a block's grower switches top<->side under camera motion (no pop).
-    // Top growers also sidestep the buffer's camera-relative cell, which is refreshed
-    // only in the shadow pass and can return a stale neighbour cell while the player
-    // translates -> a whole-blade colour flicker. The cell math MUST match
-    // update_grass_tint (same 256 window, same floor(cameraPosition.xz), same +128).
-    if (abs(v_in[0].tbn[2].y) < 0.5) { // side grower: borrow the top's colour
+    // grass_top TEXTURE, sampled the SAME way for top AND side growers - this is the top<->side
+    // colour-jump fix. A top grower's own uv is the grass_top in the FACE's uv orientation; a side
+    // grower's own uv is the grass-block DIRT side. Those don't line up, so the texel (green shade)
+    // popped at the switch. Instead, sample the shared grass_top tile at the blade's POSITION on the
+    // block top (f_pos) for BOTH - the side and top positions agree now that the relabel is winding-
+    // aware, so they land on the IDENTICAL texel. It's also a SMOOTH position map (NO hash), so
+    // clump's tiny per-frame LOD wobble can't be amplified into a texel flicker. f_pos = clump.xz -
+    // bc.xz + 0.5 (the lossy camera cancels in the subtraction -> frame-stable far from spawn).
+    vec4 grass_tile = texelFetch(grass_tile_sampler, ivec2(0), 0);
+    if (grass_tile.z > 1e-4 && grass_tile.w > 1e-4) {
+        vec2 f_pos = clamp(clump.xz - bc.xz + 0.5, 0.0, 1.0);
+        guv = grass_tile.xy + grass_tile.zw * f_pos;
+    }
+    // COLOUR: a side grower's own gl_Color is the dirt side, so borrow the top's gl_Color from the
+    // per-block buffer the shadow pass fills (camera-relative cell, matching the shadow write
+    // bit-for-bit). Top growers already carry the correct top gl_Color in v_in; the buffer stores the
+    // same gl_Color, so the two paths land on the same colour at the switch.
+    if (abs(v_in[0].tbn[2].y) < 0.5) { // side grower
         vec3 cw = bc + cameraPosition; // block-center world, matching the shadow pass
         ivec2 tcell = ivec2(floor(cw.xz) - floor(cameraPosition.xz)) + 128;
         if (all(greaterThanEqual(tcell, ivec2(0)))
             && all(lessThan(tcell, ivec2(256)))) {
             vec3 top_tint = texelFetch(grass_tint_sampler, tcell, 0).rgb;
-            if (dot(top_tint, vec3(1.0)) > 1e-3) { // 0 => not captured; keep fallback
+            if (dot(top_tint, vec3(1.0)) > 1e-3) { // 0 => not captured; keep dirt-side fallback
                 src_tint.rgb = top_tint;
-                vec4 tile = texelFetch(grass_tile_sampler, ivec2(0), 0);
-                if (tile.z > 1e-4 && tile.w > 1e-4) {
-                    // Sample the REAL grass_top texture (blades stay textured like the
-                    // block, not flat) at a per-blade point in the tile -> natural
-                    // blade-to-blade variation, same for every grower (no transition
-                    // pop). The hash input MUST come from the Iris SPLIT camera so it is
-                    // frame-stable: the EXACT integer world block index is a constant
-                    // term and only the precise sub-block fraction varies per blade.
-                    // Hashing the collapsed world float (clump + cameraPositionInt +
-                    // cameraPositionFract) let grass_hash amplify that float's ~1-ULP
-                    // camera-motion wobble into a whole-blade colour flicker that
-                    // worsened with distance from spawn.
-                    vec2 rel_xz = clump.xz + cameraPositionFract.xz;
-                    vec2 iworld = vec2(cameraPositionInt.xz) + floor(rel_xz);
-                    vec2 fworld = fract(rel_xz); // sub-block [0,1), precise
-                    float hseed = dot(iworld, vec2(0.137, 0.713))
-                        + dot(fworld, vec2(0.071, 0.911));
-                    vec2 jt = fract(vec2(grass_hash(hseed),
-                                         grass_hash(hseed + 19.19)));
-                    guv = tile.xy + tile.zw * jt;
-                }
             }
         }
     }

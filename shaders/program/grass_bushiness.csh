@@ -60,13 +60,13 @@ void main() {
                 continue; // outside the volume
             }
             uint m = texelFetch(voxel_sampler, nc, 0).x & 127u;
-            if (m != 2u && m != 82u) { // 2 = short_grass, 82 = MATERIAL_TALL_GRASS_LOWER
+            if (m != 85u && m != 82u) { // 85 = short_grass (MATERIAL_SHORT_GRASS), 82 = tall grass lower
                 continue;
             }
             float d = length(vec2(float(dx), float(dz))); // cell distance (blocks)
             float t = clamp((d - 0.5) / max(reach - 0.5, 1e-3), 0.0, 1.0);
             float falloff = 1.0 - t * t;
-            if (m == 2u) {
+            if (m == 85u) {
                 short_inf = max(short_inf, falloff);
             } else {
                 tall_inf = max(tall_inf, falloff);

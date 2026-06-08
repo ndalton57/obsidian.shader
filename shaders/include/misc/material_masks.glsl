@@ -18,6 +18,17 @@
 // grass_block: the flat cross is hidden on grass blocks; beyond range it stays a tall plant.
 #define MATERIAL_TALL_GRASS_LOWER 82
 #define MATERIAL_TALL_GRASS_UPPER 83
+// Shader Grass: the snow LAYER (minecraft:snow), split out of the transparent material so it
+// VOXELIZES as a solid block - grass_air_above then treats it as a covering block above a grass
+// block and grows no blades under it (a side grower otherwise pokes grass up through the snow).
+// Read implicitly via grass_voxel_is_solid (any solid voxel above blocks grass), not by name.
+#define MATERIAL_SNOW 84
+// Shader Grass: short_grass / fern (vanilla), split out of MATERIAL_SMALL_PLANTS so the grass shader
+// detects them BY MATERIAL (colour-independent) instead of by green tint - which failed on biome-
+// recoloured grass (savanna's is yellow-brown). Behaves as a small plant otherwise: voxelized like
+// material 2, waved like a small plant, and re-emitted as material 2 by the cutout so the fragment
+// shading / cherry recolor are unchanged.
+#define MATERIAL_SHORT_GRASS 85
 #define MATERIAL_LAVA 39
 #define MATERIAL_OPEN_EYEBLOSSOM 59
 #define MATERIAL_NETHER_PORTAL 62

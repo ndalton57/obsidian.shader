@@ -130,6 +130,27 @@ void main() {
     scene_pos = pos;
 #endif
 
+#if defined SHADER_GRASS && defined COLORED_LIGHTS
+    // Shadow-match the camera pass, which HIDES short_grass / tall_grass on grass blocks (replaced by
+    // the 3D blades, shrinking to nothing as they near). Collapse the SAME plants toward their root
+    // here, by the SAME distance factor, so the shadow shrinks with them - otherwise the hidden cross
+    // still casts a full shadow, and the 2.75x tall grass shadows itself. `greenish` keeps flowers
+    // (they aren't replaced). No grass-block-below test: the voxel buffer is cleared + refilled in
+    // THIS pass so it can't be read reliably, so short grass on bare dirt also loses its near shadow
+    // - a minor accepted trade. The collapse only moves the SHADOW geometry (voxelization above is
+    // untouched, so blade growing still works). See CLAUDE.md (Shader Grass shadows).
+    bool sg_short = material_mask == 85u // dedicated short_grass/fern (colour-independent)
+        || (material_mask == 2u && tint.g > tint.r + 0.04 && tint.g > tint.b + 0.04); // mod grass (2)
+    bool sg_tall = material_mask == 82u || material_mask == 83u;
+    if (sg_short || sg_tall) {
+        vec3 sg_center = pos + cameraPosition + at_midBlock * rcp(64.0); // block centre (world)
+        float sg_root_drop = (material_mask == 83u) ? 1.5 : 0.5; // upper tall-grass half roots 1 lower
+        vec3 sg_root = vec3(sg_center.x, sg_center.y - sg_root_drop, sg_center.z) - cameraPosition;
+        float sg_h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8, length(sg_root));
+        pos.y = sg_root.y + (pos.y - sg_root.y) * sg_h; // collapse toward the root as it nears
+    }
+#endif
+
     pos = transform(shadowModelView, pos);
     ;
 #endif

@@ -141,6 +141,7 @@ vec3 animate_vertex(
 
 #ifdef WAVING_PLANTS
         case MATERIAL_SMALL_PLANTS:
+        case MATERIAL_SHORT_GRASS:
         case MATERIAL_OPEN_EYEBLOSSOM:
 #if defined GRASS_GEOMETRY && defined SHADER_GRASS
             // Shader Grass rebuilds grass as 3D blades and waves them itself in

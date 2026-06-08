@@ -73,13 +73,18 @@ bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
     // not at block-grid corners, so they receive the +128 "transparent" marker
     // below -> identical to air for the LPV (no colored-light impact), but still
     // readable as material 2 by the grass shader's voxel lookup.
-    bool is_small_plant = block_id == 2u;
+    bool is_small_plant = block_id == 2u || block_id == 85u; // flowers/mod grass (2) + short_grass (85)
     // Shader Grass: tall_grass/large_fern (materials 82/83) are voxelized the same way, so
     // the bushiness bake can find them and lift the grass-block-top blades taller there.
     bool is_tall_grass = block_id == 82u || block_id == 83u;
+    // Snow LAYER (84): voxelize as SOLID so the grass shader reads it as a covering block above
+    // (grass_air_above) and grows NO blades under it. Voxelize at ALL verts (not just grid corners),
+    // and force the bare/solid marker below - so a snow FIELD (interior layers mesh only their
+    // non-corner top face) still registers. Same forced-marker pattern as small plants (gotcha #11).
+    bool is_snow = block_id == 84u;
 
     return (vertex_at_grid_corner || is_light_emitting_block || is_small_plant
-            || is_tall_grass)
+            || is_tall_grass || is_snow)
         && is_terrain && !is_transparent_block;
 }
 
@@ -109,7 +114,8 @@ void update_voxel_map(uint block_id) {
     // race. This also matches the documented intent (plants are transparent to the
     // LPV, zero colored-light impact) and is still read back as material 2 via the
     // `& 127u` mask in grass_read_voxel.
-    bool small_plant = block_id == 2u || block_id == 82u || block_id == 83u; // small plants + tall grass
+    bool small_plant = block_id == 2u || block_id == 82u || block_id == 83u || block_id == 85u; // small plants + tall/short grass
+    bool is_snow_layer = block_id == 84u; // snow layer: force the SOLID (bare id) marker, never +128
 
     vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
     vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
@@ -143,8 +149,11 @@ void update_voxel_map(uint block_id) {
         block_id = 79; // light gray tint
     }
 
-    // Mark transparent light sources (and always-transparent small plants)
-    block_id = (vertex_at_grid_corner && !small_plant)
+    // Mark transparent light sources and always-transparent small plants (+128); the snow LAYER is
+    // forced the other way - always SOLID (bare id) so it covers the grass below. Both force a fixed
+    // marker to dodge the per-vertex marker RACE (gotcha #11): their verts span the cell (corner +
+    // non-corner) so a corner-test marker would flip the cell solid<->transparent every frame.
+    block_id = ((vertex_at_grid_corner && !small_plant) || is_snow_layer)
         ? block_id
         : clamp(block_id + 128u, 0u, 255u);
 
