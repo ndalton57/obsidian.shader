@@ -92,8 +92,8 @@
 // SIZE, so two cells SIZE apart collide. Writes span +/-(GRASS_RANGE+1); reads are bounded by the
 // AHEAD voxel volume (the grass_is_grower gate), reaching only ~108 from the camera at
 // VOXEL_VOLUME_SIZE 128. No collision while (read_max + write_max) < SIZE, i.e. GRASS_RANGE <~ 146
-// here - so 256 covers the whole 8..128 range slider with margin. MUST match grass_face_img in
-// shaders.properties. r16ui, ~33 MB. Raise this only if you raise VOXEL_VOLUME_SIZE or push
+// here - so 256 covers the whole 8..128 range slider with margin. MUST match grass_face_img_a/b in
+// shaders.properties. r32ui per-block face bitmask, DOUBLE-BUFFERED (A/B ping-pong) ~134 MB. Raise only if you raise VOXEL_VOLUME_SIZE or push
 // GRASS_RANGE past ~146. See CLAUDE.md gotcha #9.
 #define GRASS_MASK_SIZE 256
 

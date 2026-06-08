@@ -37,32 +37,43 @@ writeonly uniform image3D grass_bushiness_img;
 void main() {
     ivec3 cell = ivec3(gl_GlobalInvocationID);
 
-    // One thread per cell -> the strongest short_grass (material 2) falloff from any cell
-    // within GRASS_BUSHINESS_REACH in the SAME y-layer (the boost spreads horizontally, the
-    // way grass tufts out across neighbouring block tops). The reach is FIXED here:
-    // SHORT_GRASS_HEIGHT scales the HEIGHT in the GS, NOT this radius, so dense short_grass
-    // doesn't turn the whole field tall. 1 - t^2 from full at the short_grass cell to 0 at reach.
+    // One thread per cell -> the strongest decal falloff from any cell within
+    // GRASS_BUSHINESS_REACH in the SAME y-layer (the boost spreads horizontally, the way grass
+    // tufts out across neighbouring block tops). TWO channels: R = proximity to short_grass
+    // (material 2), G = proximity to tall_grass/large_fern (material 82, the lower half). The GS
+    // lifts the grass-block-top blades by SHORT_GRASS_HEIGHT / TALL_GRASS_HEIGHT respectively. The
+    // reach is FIXED here - the height sliders set how TALL, not how far. 1 - t^2 from full at the
+    // decal cell to 0 at reach.
     float reach = GRASS_BUSHINESS_REACH; // blocks (fixed; raise for a wider spread)
 #ifdef GRASS_BUSHINESS_DYNAMIC_SCAN
     int n = min(int(ceil(reach)), GRASS_BUSHINESS_MAX_CELLS);
 #else
     const int n = GRASS_BUSHINESS_MAX_CELLS; // compile-time -> the loop unrolls
 #endif
-    float influence = 0.0;
+    float short_inf = 0.0; // R: short_grass proximity
+    float tall_inf = 0.0;  // G: tall_grass / large_fern proximity
     for (int dx = -n; dx <= n; ++dx) {
         for (int dz = -n; dz <= n; ++dz) {
             ivec3 nc = cell + ivec3(dx, 0, dz);
             if (any(lessThan(nc, ivec3(0)))
-                || any(greaterThanEqual(nc, ivec3(VOXEL_VOLUME_SIZE)))
-                || (texelFetch(voxel_sampler, nc, 0).x & 127u) != 2u) {
-                continue; // outside the volume, or not short_grass
+                || any(greaterThanEqual(nc, ivec3(VOXEL_VOLUME_SIZE)))) {
+                continue; // outside the volume
+            }
+            uint m = texelFetch(voxel_sampler, nc, 0).x & 127u;
+            if (m != 2u && m != 82u) { // 2 = short_grass, 82 = MATERIAL_TALL_GRASS_LOWER
+                continue;
             }
             float d = length(vec2(float(dx), float(dz))); // cell distance (blocks)
             float t = clamp((d - 0.5) / max(reach - 0.5, 1e-3), 0.0, 1.0);
-            influence = max(influence, 1.0 - t * t);
+            float falloff = 1.0 - t * t;
+            if (m == 2u) {
+                short_inf = max(short_inf, falloff);
+            } else {
+                tall_inf = max(tall_inf, falloff);
+            }
         }
     }
-    imageStore(grass_bushiness_img, cell, vec4(influence));
+    imageStore(grass_bushiness_img, cell, vec4(short_inf, tall_inf, 0.0, 0.0));
 }
 #else
 void main() {}

@@ -58,6 +58,10 @@ const float wetnessHalflife         = 70.0;
   // (1.0 = same as normal grass). Only the HEIGHT - the spread radius is fixed
   // (GRASS_BUSHINESS_REACH in global.glsl), so this does not change how far the boost reaches.
   #define SHORT_GRASS_HEIGHT 1.75 // [1.0 1.05 1.1 1.15 1.2 1.25 1.3 1.35 1.4 1.45 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.15 2.2 2.25 2.3 2.35 2.4 2.45 2.5]
+  // How tall the shader grass grows where vanilla tall_grass/large_fern sits (height
+  // multiplier; ~3.5 ~= 2 blocks). Reuses the grass-block-top blades lifted by the bushiness
+  // field - no extra geometry.
+  #define TALL_GRASS_HEIGHT 2.75 // [2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0]
   #define GRASS_DENSITY 3 // [1 2 3 4 5]
   #define GRASS_QUALITY 1 // [0 1 2]
   #define GRASS_RANGE 64.0 // [8.0 16.0 24.0 32.0 40.0 48.0 56.0 64.0 72.0 80.0 88.0 96.0 104.0 112.0 120.0 128.0]

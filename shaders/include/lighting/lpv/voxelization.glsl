@@ -74,8 +74,12 @@ bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
     // below -> identical to air for the LPV (no colored-light impact), but still
     // readable as material 2 by the grass shader's voxel lookup.
     bool is_small_plant = block_id == 2u;
+    // Shader Grass: tall_grass/large_fern (materials 82/83) are voxelized the same way, so
+    // the bushiness bake can find them and lift the grass-block-top blades taller there.
+    bool is_tall_grass = block_id == 82u || block_id == 83u;
 
-    return (vertex_at_grid_corner || is_light_emitting_block || is_small_plant)
+    return (vertex_at_grid_corner || is_light_emitting_block || is_small_plant
+            || is_tall_grass)
         && is_terrain && !is_transparent_block;
 }
 
@@ -105,7 +109,7 @@ void update_voxel_map(uint block_id) {
     // race. This also matches the documented intent (plants are transparent to the
     // LPV, zero colored-light impact) and is still read back as material 2 via the
     // `& 127u` mask in grass_read_voxel.
-    bool small_plant = block_id == 2u;
+    bool small_plant = block_id == 2u || block_id == 82u || block_id == 83u; // small plants + tall grass
 
     vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
     vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
@@ -193,7 +197,7 @@ void update_grass_tint(uint block_id) {
 // grass-block face stamps the air cell it faces; the election reads block_center +
 // side_dir. Grass blocks within GRASS_RANGE only, to keep the write count down.
 // MODE 3 (Mask) ONLY: mode 4 (Camera) stamps the mask from the gbuffer GS instead (the shadow
-// pass can't see the camera's per-section direction culling), so it owns grass_face_img there
+// pass can't see the camera's per-section direction culling), so it owns grass_face_img_a/b there
 // and this shadow-pass write must stay out of the way.
 #if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
 void update_grass_faces(uint block_id) {

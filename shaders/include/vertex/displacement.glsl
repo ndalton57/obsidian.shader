@@ -161,6 +161,7 @@ vec3 animate_vertex(
 #endif
 
         case MATERIAL_TALL_PLANTS_LOWER:
+        case MATERIAL_TALL_GRASS_LOWER:
             return world_pos
                 + (get_wind_displacement(
                        world_pos,
@@ -172,6 +173,7 @@ vec3 animate_vertex(
                 * float(is_top_vertex);
 
         case MATERIAL_TALL_PLANTS_UPPER:
+        case MATERIAL_TALL_GRASS_UPPER:
             return world_pos
                 + (get_wind_displacement(
                        world_pos,

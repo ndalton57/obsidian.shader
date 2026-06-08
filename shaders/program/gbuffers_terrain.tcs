@@ -22,13 +22,14 @@
 uniform vec3 cameraPosition;
 uniform mat4 gbufferModelViewInverse;
 uniform usampler3D voxel_sampler;
-#if PROCEDURAL_GEOMETRY_MODE >= 3
-uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow / mode 4 camera)
-#endif
-#if PROCEDURAL_GEOMETRY_MODE >= 4
-uniform int frameCounter; // Shader Grass mode 4: reads the camera-mask temporal stamp
+#if PROCEDURAL_GEOMETRY_MODE == 3
+uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow pass)
+#elif PROCEDURAL_GEOMETRY_MODE >= 4
+uniform int frameCounter; // Shader Grass mode 4: camera-mask temporal stamp + ping-pong parity
 uniform vec3 cameraPositionFract; // mode 4: exact world-index mask cell (Iris split camera)
 uniform ivec3 cameraPositionInt;
+uniform usampler3D grass_face_sampler_a; // mode 4: DOUBLE-BUFFERED camera mask (read the non-written one)
+uniform usampler3D grass_face_sampler_b;
 #endif
 #include "/include/lighting/lpv/voxelization.glsl"
 #include "/include/misc/grass_election.glsl"

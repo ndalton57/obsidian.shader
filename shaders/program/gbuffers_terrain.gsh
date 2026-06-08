@@ -113,18 +113,23 @@ uniform vec2 taa_offset;
 #ifdef COLORED_LIGHTS
 uniform mat4 gbufferModelViewInverse;
 uniform usampler3D voxel_sampler;
-#if PROCEDURAL_GEOMETRY_MODE >= 3
-uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow / mode 4 camera)
-#endif
-#if PROCEDURAL_GEOMETRY_MODE >= 4
-// Mode 4 (Camera): frameCounter is the temporal stamp. BOTH terrain programs compile the
-// election read (grass_face_rendered), so both declare it. Only the SOLID program WRITES
-// the mask (in its grass-block passthrough), and image load/store needs
-// GL_ARB_shader_image_load_store (#version 400) - enabled in the solid GS stub - so the
-// image is declared there ONLY; the cutout program stays image-free (no extension needed).
+#if PROCEDURAL_GEOMETRY_MODE == 3
+uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow pass)
+#elif PROCEDURAL_GEOMETRY_MODE >= 4
+// Mode 4 (Camera): the per-block face bitmask is DOUBLE-BUFFERED (A/B, ping-ponged by frameCounter
+// parity) so the election READS the buffer the pass is NOT writing this frame. Reading a buffer the
+// same pass also atomically WRITES returned unstable values (the old single buffer leaned on a
+// "texture read sees last frame" trick that isn't guaranteed once the write is an atomic) -> grass
+// above eye level flickered. Two buffers = a clean cross-frame hand-off. frameCounter drives both the
+// stamp and the parity. BOTH terrain programs compile the election read, so both declare the
+// samplers; only the SOLID program WRITES (its grass-block passthrough) via imageAtomicCompSwap -
+// image atomics need GL_ARB_shader_image_load_store (#version 400), enabled in the solid GS stub.
 uniform int frameCounter;
+uniform usampler3D grass_face_sampler_a;
+uniform usampler3D grass_face_sampler_b;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-writeonly uniform uimage3D grass_face_img;
+layout(r32ui) coherent uniform uimage3D grass_face_img_a;
+layout(r32ui) coherent uniform uimage3D grass_face_img_b;
 #endif
 #endif
 // Shader Grass: per-block grass-block top tint + shared grass_top atlas tile,
@@ -134,6 +139,35 @@ uniform sampler2D grass_tint_sampler;
 uniform sampler2D grass_tile_sampler;
 #include "/include/lighting/lpv/voxelization.glsl"
 #include "/include/misc/grass_election.glsl"
+
+#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 4 && defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Accumulate one camera-drawn face into THIS block's OWN cell. The cell is an r32ui: high bits =
+// frame stamp, low 6 = face bitmask. CAS loop: if the cell's stamp is stale (a new frame) RESET the
+// mask to just this face; else OR this face in. Bounded for GPU safety; at most 6 faces ever share
+// a cell (usually 1-3 drawn) so it converges in ~1-2 iterations.
+void grass_stamp_face(ivec3 cell, uint face_bit) {
+    uint stamp = grass_stamp_now();
+    bool even = (frameCounter & 1) == 0; // even frame -> WRITE A (election reads B); odd -> WRITE B
+    uint cur = even ? imageLoad(grass_face_img_a, cell).x
+                    : imageLoad(grass_face_img_b, cell).x;
+    for (int i = 0; i < 8; ++i) {
+        uint desired = ((cur >> 6) == stamp) ? (cur | face_bit) : ((stamp << 6) | face_bit);
+        if (desired == cur) {
+            return; // this face already recorded this frame
+        }
+        uint prev;
+        if (even) { // explicit branch: only ONE buffer is ever written this frame (not a ternary)
+            prev = imageAtomicCompSwap(grass_face_img_a, cell, cur, desired);
+        } else {
+            prev = imageAtomicCompSwap(grass_face_img_b, cell, cur, desired);
+        }
+        if (prev == cur) {
+            return; // won the swap
+        }
+        cur = prev; // retry against the value the winner left
+    }
+}
+#endif
 
 // Voxelized block material at a scene-space position (0 = air / outside volume).
 uint grass_read_voxel(vec3 scene_p) {
@@ -145,17 +179,18 @@ uint grass_read_voxel(vec3 scene_p) {
 }
 
 #ifdef SHADER_GRASS
-// Shader Grass: the baked bushiness influence field (filled by program/grass_bushiness.csh).
-// One value per voxel cell = the grass-height boost spread out from nearby vanilla
-// short_grass, so the blade path reads it with one lookup instead of scanning per blade.
+// Shader Grass: the baked decal-proximity field (filled by program/grass_bushiness.csh).
+// Per voxel cell: R = nearness to short_grass, G = nearness to tall_grass/large_fern. The
+// blade path reads it with one lookup instead of scanning the voxels per blade.
 uniform sampler3D grass_bushiness_sampler;
 
-float grass_bushiness_at(ivec3 cell) {
+// Baked decal influence at a cell (x = short_grass, y = tall_grass; 0 outside the volume).
+vec2 grass_bushiness_at(ivec3 cell) {
     if (any(lessThan(cell, ivec3(0)))
         || any(greaterThanEqual(cell, voxel_volume_size))) {
-        return 0.0;
+        return vec2(0.0);
     }
-    return texelFetch(grass_bushiness_sampler, cell, 0).x;
+    return texelFetch(grass_bushiness_sampler, cell, 0).xy;
 }
 #endif
 #endif
@@ -313,11 +348,9 @@ void emit_passthrough(bool grower) {
 // changes with the slider. Re-projects from scene space - fine for this billboard (the
 // re-projection acne worry is only the tessellated SOLID ground); the base vert stays put, so
 // no z-fight at the root.
-void emit_short_grass_scaled(float h) {
-    // Fixed decal height (NOT the SHORT_GRASS_HEIGHT slider - see above).
-    const float decal_height = 1.25;
+void emit_short_grass_scaled(float decal_height, float h) {
     float base_y = min(v_in[0].scene_pos.y, min(v_in[1].scene_pos.y, v_in[2].scene_pos.y));
-    float scale = decal_height * h; // fixed decal height x distance shrink
+    float scale = decal_height * h; // decal height x distance shrink
     for (int i = 0; i < 3; ++i) {
         v_out.uv = v_in[i].uv;
         vec3 sp = v_in[i].scene_pos;
@@ -397,16 +430,13 @@ void main() {
         make_grass = in_range && v_in[0].tbn[2].y > 0.9;
 #endif
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 4
-        // CAMERA-PASS MASK (mode 4): every grass-block face that reaches this GS was
-        // drawn by the CAMERA (Sodium already culled the rest), so stamp the air cell it
-        // faces with frameCounter. NEXT frame's election reads it back -> grass grows from
-        // a face the camera truly draws: no enclosed-block blind spot, single face, no
-        // double-draw. See CLAUDE.md gotcha #9.
+        // CAMERA-PASS MASK (mode 4): every grass-block face that reaches this GS was drawn by the
+        // CAMERA (Sodium already culled the rest). Record THIS face's bit into the block's OWN cell
+        // (grass_mask_cell(bc), ABSOLUTE world index so it's frame-stable). Only this block ever
+        // writes its own cell, so NEXT frame's election reads an UNAMBIGUOUS per-block face bitmask
+        // - no 6-way air-cell sharing (which false-positived the top and sides). See CLAUDE.md.
         if (in_range) {
-            // grass_mask_cell: ABSOLUTE world-index texel (NOT camera-relative), so next
-            // frame's election reads the SAME texel even as you walk/rotate. See CLAUDE.md #9.
-            imageStore(grass_face_img, grass_mask_cell(bc + round(v_in[0].tbn[2])),
-                       uvec4(grass_stamp_now(), 0u, 0u, 0u));
+            grass_stamp_face(grass_mask_cell(bc), grass_face_bit(round(v_in[0].tbn[2])));
         }
 #endif
     }
@@ -433,9 +463,35 @@ void main() {
         return;
     }
 #else
-    // Cutout: short_grass (greenish, ~vertical) is re-emitted at SHORT_GRASS_HEIGHT scale; when it
-    // sits on a GRASS BLOCK it also SHRINKS to 0 with distance to cross-fade into the block-top
-    // shader grass. On dirt/podzol it just keeps the height knob (no shrink). Non-grass (flowers,
+#ifdef SHADER_GRASS
+    // Cutout: tall_grass/large_fern (82/83) are REPLACED by the lifted grass-block-top blades on
+    // grass blocks - hide the flat cross there, cross-fading it out with distance the way
+    // short_grass does. On dirt/podzol (no blades to take over) it stays the vanilla cross.
+    if (v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_LOWER)
+        || v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_UPPER)) {
+        float h = 1.0;
+#ifdef COLORED_LIGHTS
+        vec3 base = vec3(
+            (p0.x + p1.x + p2.x) * (1.0 / 3.0),
+            min(p0.y, min(p1.y, p2.y)),
+            (p0.z + p1.z + p2.z) * (1.0 / 3.0)
+        );
+        // Grass block below the plant: lower half ~0.4 below its base, upper half ~1.4.
+        float below = v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_UPPER) ? 1.4 : 0.4;
+        if (grass_read_voxel(base - vec3(0.0, below, 0.0)) == uint(MATERIAL_GRASS_BLOCK)) {
+            h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8, length(base));
+            if (h < 0.02) {
+                return; // fully replaced by the tall blades
+            }
+        }
+#endif
+        emit_short_grass_scaled(1.0, h); // natural tall-grass height, cross-fade with distance
+        return;
+    }
+#endif
+    // Cutout: short_grass (greenish, ~vertical) is re-emitted at the short-grass decal height; when
+    // it sits on a GRASS BLOCK it also SHRINKS to 0 with distance to cross-fade into the block-top
+    // shader grass. On dirt/podzol it just keeps the height (no shrink). Non-grass (flowers,
     // ...) passes straight through.
     if (make_grass) {
         float h = 1.0; // distance shrink (1 = full); only short_grass ON a grass block shrinks
@@ -455,7 +511,7 @@ void main() {
             }
         }
 #endif
-        emit_short_grass_scaled(h); // SHORT_GRASS_HEIGHT x h height shrink
+        emit_short_grass_scaled(1.25, h); // short-grass decal height x distance shrink
         return;
     }
     emit_passthrough(false); // non-grass (flowers, ...) -> vanilla
@@ -596,29 +652,30 @@ void main() {
     // Grass-block tops: tall, thin blades (density comes from tessellation).
     float height = 0.65 * BASE_GRASS_HEIGHT;
 #if defined COLORED_LIGHTS && defined SHADER_GRASS
-    // Bushiness: grass grows taller on and around blocks holding vanilla short_grass.
-    // SHORT_GRASS_HEIGHT (>= 1.0) is the only knob - full boost at the short_grass block,
-    // fading to zero over a reach that scales with the boost (taller -> farther). The
-    // whole spread is BAKED per voxel cell by program/grass_bushiness.csh (a fixed falloff
-    // curve, computed once per cell), so here it is a single field lookup - NOT a per-blade
-    // neighbour scan (that ran hundreds of times per block in the GS and tanked FPS). Read
-    // it BILINEAR in XZ at the short-grass cell layer above this block -> a smooth per-blade
-    // falloff with no block-to-block step. (Nearest in Y: the boost is a horizontal spread,
-    // and y-interpolation would just dilute it against the empty layers above/below.)
-    float boost = SHORT_GRASS_HEIGHT - 1.0; // extra height fraction (0 at neutral 1.0)
-    if (boost > 0.0) {
+    // Bushiness / tall grass: lift the blade where short_grass or tall_grass sits nearby.
+    // The whole spread is BAKED per voxel cell by program/grass_bushiness.csh (R = short_grass
+    // nearness, G = tall_grass nearness; a fixed-radius falloff, computed once per cell), so
+    // here it is a single field lookup - NOT a per-blade neighbour scan (that ran hundreds of
+    // times per block in the GS and tanked FPS). Read it BILINEAR in XZ at the decal cell layer
+    // above this block -> a smooth per-blade falloff with no block-to-block step. (Nearest in Y:
+    // the boost is a horizontal spread; y-interpolation would dilute it against empty layers.)
+    {
         vec3 vp = scene_to_voxel_space(vec3(clump.x, bc.y + 1.0, clump.z));
-        int vy = int(vp.y);              // short-grass cell layer (one above the block)
+        int vy = int(vp.y);              // decal cell layer (one above the block)
         vec2 fxz = vp.xz - 0.5;          // cell-CENTRE alignment for the interpolation
         ivec2 i0 = ivec2(floor(fxz));
         vec2 f = fract(fxz);
-        float influence = mix(
+        vec2 infl = mix(
             mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y)),
                 grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y)), f.x),
             mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y + 1)),
                 grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y + 1)), f.x),
             f.y);
-        height *= 1.0 + boost * influence; // up to SHORT_GRASS_HEIGHT x at the block
+        // The taller boost wins: a tall_grass spot grows ~2-block blades (TALL_GRASS_HEIGHT), a
+        // short_grass spot a modest tuft (SHORT_GRASS_HEIGHT). The reach is fixed (bake side).
+        float lift = max((SHORT_GRASS_HEIGHT - 1.0) * infl.x,
+                         (TALL_GRASS_HEIGHT - 1.0) * infl.y);
+        height *= 1.0 + lift;
     }
 #endif
     // Smooth LOD fade near GRASS_RANGE: blades shrink to nothing instead of

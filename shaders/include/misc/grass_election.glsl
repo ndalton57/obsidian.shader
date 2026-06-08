@@ -67,12 +67,45 @@ uint grass_stamp_now() {
     return 1u + uint(frameCounter % 65520);
 }
 
-// True if the camera DREW this grass-block face last frame (the GS stamped it with the current
-// stamp; drawn = stamp is this frame or last, cyclic age <= 1; 0 = never). The only test that
-// sees Sodium's per-section CAMERA-direction culling, at the cost of a 1-frame lag. See CLAUDE.md.
-bool grass_face_rendered(vec3 block_center, vec3 dir) {
-    uint stamp = texelFetch(grass_face_sampler, grass_mask_cell(block_center + dir), 0).x;
-    return stamp != 0u && (grass_stamp_now() + 65520u - stamp) % 65520u <= 1u;
+// PER-BLOCK 6-bit FACE BITMASK, DOUBLE-BUFFERED (grass_face_img_a/b, ping-ponged by frame parity):
+// an r32ui per cell, high bits = frame stamp, low 6 = which of THIS block's faces the camera drew.
+// The GS writes a block's OWN cell (grass_mask_cell(bc)) via grass_stamp_face - and NOBODY else
+// writes that cell - so the read is UNAMBIGUOUS, unlike the air cell a face points into (which SIX
+// blocks' faces share). The election reads the buffer NOT written this frame (a clean cross-frame
+// hand-off; reading the buffer being atomically written THIS pass returned unstable values and
+// flickered grass above eye level). Sees Sodium's per-section + per-face camera-direction culling,
+// at a 1-frame lag. See CLAUDE.md (VERY IMPORTANT election).
+const uint GRASS_FACE_PX  = 1u << 0; // +x
+const uint GRASS_FACE_NX  = 1u << 1; // -x
+const uint GRASS_FACE_TOP = 1u << 2; // +y
+const uint GRASS_FACE_NY  = 1u << 3; // -y (unused by the election)
+const uint GRASS_FACE_PZ  = 1u << 4; // +z
+const uint GRASS_FACE_NZ  = 1u << 5; // -z
+
+// Axis-unit normal -> its face bit (used by the GS write).
+uint grass_face_bit(vec3 dir) {
+    if (dir.y >  0.5) return GRASS_FACE_TOP;
+    if (dir.y < -0.5) return GRASS_FACE_NY;
+    if (dir.x >  0.5) return GRASS_FACE_PX;
+    if (dir.x < -0.5) return GRASS_FACE_NX;
+    if (dir.z >  0.5) return GRASS_FACE_PZ;
+    return GRASS_FACE_NZ;
+}
+
+// Bitmask of THIS block's camera-drawn faces (0 if its cell is stale / never written). drawn =
+// stamp is this frame or last (cyclic age <= 1; 0 = never written, RESERVED).
+uint grass_block_faces(vec3 block_center) {
+    ivec3 cell = grass_mask_cell(block_center);
+    // DOUBLE-BUFFER read: the GS writes A on even frames, B on odd - so read the OTHER one, the
+    // buffer NOT being written this frame. A clean cross-frame read (last frame's completed buffer)
+    // instead of reading the buffer the same pass is atomically writing (that flickered).
+    uint v = ((frameCounter & 1) == 0) ? texelFetch(grass_face_sampler_b, cell, 0).x
+                                       : texelFetch(grass_face_sampler_a, cell, 0).x;
+    uint stamp = v >> 6;
+    if (stamp == 0u || (grass_stamp_now() + 65520u - stamp) % 65520u > 1u) {
+        return 0u;
+    }
+    return v & 0x3Fu;
 }
 #elif PROCEDURAL_GEOMETRY_MODE >= 3
 // ----- Mode 3 (Mask, shadow pass) -----
@@ -89,29 +122,48 @@ bool grass_face_rendered(vec3 block_center, vec3 dir) {
 #endif
 
 #if PROCEDURAL_GEOMETRY_MODE >= 4
-// Mode 4 election. The camera mask IS what the camera drew, so no y APPROXIMATION - but a y
-// FAST-PATH: a top below the camera is always drawn, so skip the mask and grow from the TOP.
-// Otherwise: TOP if drawn, else the FIRST drawn side in a FIXED order (not "most camera-facing"
-// - that flipped sides every few degrees of rotation and, with the 1-frame lag, read as
-// flicker). See CLAUDE.md gotcha #9.
+// Mode 4 election. Reads THIS block's per-block face bitmask (grass_block_faces) - every face is
+// UNAMBIGUOUS (each block owns its mask cell; no 6-way air-cell sharing). TOP if its bit is set
+// (preferred grower), else the MOST camera-facing DRAWN side. Most-camera-facing - NOT first in a
+// fixed order - is what keeps the side grower STABLE. A cull-zone block (top culled) is drawn by the
+// camera EVERY frame on its dominant (high-dot) side, but its grazing/marginal sides flicker in and
+// out of the drawn set frame-to-frame (TAA jitters the projection -> Sodium's per-section/back-face
+// cull margin wobbles). Fixed order would pick a flickering marginal side whenever it sorts before
+// the dominant one -> the grower SWAPS sides every few frames (the positional jitter). Picking max
+// dot makes the dominant side - drawn every frame - always win, so marginal flicker can't change the
+// result. Strict > with fixed iteration order breaks the 45-degree corner tie deterministically
+// (first wins), so a static camera never churns and rotation switches once at the symmetric angle.
+// (The "most-camera-facing churns" warning was the AIR-CELL era: its candidate set had fluctuating
+// FALSE POSITIVES; the clean per-block bitmask has none, so the dominant side is rock-stable.)
+// y FAST-PATH first: a top below the camera is always drawn. See CLAUDE.md (VERY IMPORTANT election).
 vec3 grass_grower_dir(vec3 block_center) {
-    // Fast path: top face below the camera -> always camera-drawn -> top, no mask reads.
+    // Fast path: top face below the camera -> always camera-drawn -> top, no mask read.
     if (block_center.y + 0.5 < 0.0) {
         return vec3(0.0, 1.0, 0.0);
     }
-    if (grass_face_rendered(block_center, vec3(0.0, 1.0, 0.0))) {
-        return vec3(0.0, 1.0, 0.0);
+    uint faces = grass_block_faces(block_center); // exactly which of THIS block's faces were drawn
+    if ((faces & GRASS_FACE_TOP) != 0u) {
+        return vec3(0.0, 1.0, 0.0); // TOP - preferred grower (a rendered top must win)
     }
+    // Else the MOST camera-facing drawn side (stable against marginal-side flicker; see above).
     const vec3 dirs[4] = vec3[4](
         vec3(1.0, 0.0, 0.0), vec3(-1.0, 0.0, 0.0),
         vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, -1.0)
     );
+    const uint bits[4] = uint[4](GRASS_FACE_PX, GRASS_FACE_NX, GRASS_FACE_PZ, GRASS_FACE_NZ);
+    vec3 best = vec3(0.0, 1.0, 0.0); // nothing drawn -> top (grows nothing; no camera geometry)
+    float best_dot = 0.0;            // best_dot starts at 0 -> only camera-facing sides qualify
     for (int i = 0; i < 4; ++i) {
-        if (grass_face_rendered(block_center, dirs[i])) {
-            return dirs[i]; // first drawn side, fixed priority
+        if ((faces & bits[i]) == 0u) {
+            continue;
+        }
+        float facing = dot(dirs[i], -block_center); // distance cancels (same block) -> ~cos(angle)
+        if (facing > best_dot) {     // strict > -> first in fixed order wins exact ties (45 deg)
+            best_dot = facing;
+            best = dirs[i];
         }
     }
-    return vec3(0.0, 1.0, 0.0); // nothing drawn -> top (grows nothing if the top isn't drawn)
+    return best;
 }
 #else
 // ----- Modes 2 (Deduced) / 3 (Mask) election -----

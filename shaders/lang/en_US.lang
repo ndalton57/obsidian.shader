@@ -111,6 +111,8 @@ option.GRASS_VIBRANCY                  = Grass Vibrancy
 option.GRASS_VIBRANCY.comment          = Saturation of the 3D shader-grass blades (the blades only, not the grass block). 1.0 leaves them as-is; higher makes them more vibrant/lush, lower desaturates them
 option.SHORT_GRASS_HEIGHT              = Short Grass Height
 option.SHORT_GRASS_HEIGHT.comment      = How much taller the shader grass grows on and around blocks that have short grass (1.0 = same as normal grass). Higher = taller, not wider (the spread radius is fixed)
+option.TALL_GRASS_HEIGHT              = Tall Grass Height
+option.TALL_GRASS_HEIGHT.comment      = How tall the shader grass grows where tall grass / large fern sits, replacing the flat vanilla cross (height multiplier; ~3.5 is about 2 blocks tall)
 option.GRASS_BASE_THICKNESS            = Blade Thickness
 option.GRASS_BASE_THICKNESS.comment    = Width of each blade at its base
 option.GRASS_THICKNESS_FALLOFF         = Thickness Falloff
@@ -121,6 +123,7 @@ option.GRASS_RANDOMNESS                = Randomness
 option.GRASS_RANDOMNESS.comment        = How much blades randomly lean / vary
 suffix.BASE_GRASS_HEIGHT               = m
 suffix.SHORT_GRASS_HEIGHT              = x
+suffix.TALL_GRASS_HEIGHT               = x
 suffix.GRASS_RANGE                     = m
 option.SLANTED_RAIN                    = Slanted Rain
 option.SLANTED_RAIN.comment            = Slanted rain particles. Makes rainy weather a little more atmospheric
