@@ -589,12 +589,20 @@ void main() {
         // tessellated mirror-imaged and their blades shifted on a swap.
         float fx, fz;
         if (an.y > 0.5) {
-            // Top / bottom: swap X and Z so the top quad's tessellation diagonal lines up
-            // with the four sides' (which now share one orientation). The face is already
-            // the X-Z plane, but Minecraft splits the top quad on the opposite diagonal
-            // from a side quad, so without the swap a top<->side grower swap shifts blades.
-            fx = zl;
-            fz = xl;
+            if (v_in[0].tbn[2].y > 0.0) {
+                // Top: swap X and Z so the top quad's tessellation diagonal lines up with the
+                // four sides' (which share one orientation). The face is already the X-Z plane,
+                // but Minecraft splits the top quad on the opposite diagonal from a side quad,
+                // so without the swap a top<->side grower swap shifts blades.
+                fx = zl;
+                fz = xl;
+            } else {
+                // Bottom: the bottom quad is the top wound the other way (CCW from below = CW
+                // from above), so it needs the top's swap PLUS a flip - a 90 deg rotation - to
+                // land its blades on the same top positions as every other face.
+                fx = zl;
+                fz = 1.0 - xl;
+            }
         } else {
             fx = yl; // height -> top X (same rule for every side)
             if (an.x > 0.5) {

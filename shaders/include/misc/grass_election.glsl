@@ -78,7 +78,7 @@ uint grass_stamp_now() {
 const uint GRASS_FACE_PX  = 1u << 0; // +x
 const uint GRASS_FACE_NX  = 1u << 1; // -x
 const uint GRASS_FACE_TOP = 1u << 2; // +y
-const uint GRASS_FACE_NY  = 1u << 3; // -y (unused by the election)
+const uint GRASS_FACE_NY  = 1u << 3; // -y (bottom; elects on overhangs viewed from below)
 const uint GRASS_FACE_PZ  = 1u << 4; // +z
 const uint GRASS_FACE_NZ  = 1u << 5; // -z
 
@@ -145,15 +145,20 @@ vec3 grass_grower_dir(vec3 block_center) {
     if ((faces & GRASS_FACE_TOP) != 0u) {
         return vec3(0.0, 1.0, 0.0); // TOP - preferred grower (a rendered top must win)
     }
-    // Else the MOST camera-facing drawn side (stable against marginal-side flicker; see above).
-    const vec3 dirs[4] = vec3[4](
+    // Else the MOST camera-facing drawn side OR BOTTOM (stable against marginal-side flicker; see
+    // above). The bottom (-Y) is a candidate too: an overhanging grass block viewed from below has
+    // its top culled and its bottom drawn, so the bottom is the only face the camera amplifies there.
+    // It only ever enters the drawn set when the block actually overhangs air, so a normal grass
+    // block (enclosed bottom) never elects it.
+    const vec3 dirs[5] = vec3[5](
         vec3(1.0, 0.0, 0.0), vec3(-1.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, -1.0)
+        vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, -1.0),
+        vec3(0.0, -1.0, 0.0)
     );
-    const uint bits[4] = uint[4](GRASS_FACE_PX, GRASS_FACE_NX, GRASS_FACE_PZ, GRASS_FACE_NZ);
+    const uint bits[5] = uint[5](GRASS_FACE_PX, GRASS_FACE_NX, GRASS_FACE_PZ, GRASS_FACE_NZ, GRASS_FACE_NY);
     vec3 best = vec3(0.0, 1.0, 0.0); // nothing drawn -> top (grows nothing; no camera geometry)
-    float best_dot = 0.0;            // best_dot starts at 0 -> only camera-facing sides qualify
-    for (int i = 0; i < 4; ++i) {
+    float best_dot = 0.0;            // best_dot starts at 0 -> only camera-facing faces qualify
+    for (int i = 0; i < 5; ++i) {
         if ((faces & bits[i]) == 0u) {
             continue;
         }
