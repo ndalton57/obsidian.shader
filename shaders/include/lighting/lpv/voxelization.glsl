@@ -44,6 +44,23 @@ bool is_inside_voxel_volume(vec3 voxel_pos) {
     return clamp01(voxel_pos) == voxel_pos;
 }
 
+// Shader Grass: ahead-centred cell for the per-block TOP tint buffer. Mirrors scene_to_voxel_space
+// but uses GRASS_TINT_SIZE, so the tint buffer is DECOUPLED from the LPV's VOXEL_VOLUME_SIZE (the
+// colored-lights resolution doesn't size it). At the default VOXEL_VOLUME_SIZE the two coincide. Used
+// by BOTH the shadow-pass write (update_grass_tint) and the gbuffer read (grass_top_tint_reproduce),
+// so it lives here as the one shared definition. Same-frame (written then read within a frame), so the
+// camera-relative fract(cameraPosition) and look-direction centre are consistent across the two passes.
+vec3 scene_to_grass_tint_space(vec3 scene_pos) {
+    vec3 dir = gbufferModelViewInverse[2].xyz;
+#if VOXEL_VOLUME_CENTER == VOXEL_VOLUME_CENTER_AHEAD
+    vec3 to_center
+        = floor(dir * float(GRASS_TINT_SIZE) * (0.5 - 0.15) * rcp(max_of(abs(dir))));
+#else
+    vec3 to_center = vec3(0.0);
+#endif
+    return scene_pos + fract(cameraPosition) + 0.5 * vec3(GRASS_TINT_SIZE) + to_center;
+}
+
 #ifdef PROGRAM_SHADOW
 bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
     #if !defined COLORWHEEL
@@ -168,8 +185,11 @@ void update_voxel_map(uint block_id) {
 // every top each frame, and this VSH image store is NOT depth tested, so the tint
 // is captured even when the top is occluded from the sun or culled for the player
 // camera. Storing the literal gl_Color means biome + biome-blend mods are tracked
-// exactly, and because it is keyed to the block (not the face) the colour can't
-// change as the player moves across Sodium's top<->side face-cull transition.
+// exactly. The tint is stored per CORNER - a 2x2 XZ tile of texels per block, indexed by
+// the sign of at_midBlock - in a 3D buffer keyed by block X/Y/Z, so each of the 4 top
+// vertices writes its OWN texel (race-free, no atomics) AND vertically-stacked grass blocks
+// never share a slot. The grass shader then bilinearly blends the 4 corners to reproduce the
+// top's smooth per-position biome colour for blades grown on any face.
 void update_grass_tint(uint block_id) {
     if (block_id != 81u) { // MATERIAL_GRASS_BLOCK
         return;
@@ -180,17 +200,26 @@ void update_grass_tint(uint block_id) {
 
     vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
     vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
-    vec3 world = transform(shadowModelViewInverse, view_pos) + cameraPosition;
+    vec3 scene_center = transform(shadowModelViewInverse, view_pos); // block centre, scene space
 
-    // Camera-relative XZ cell. MUST match the read in gbuffers_terrain.gsh: same
-    // 256-wide window, same floor(cameraPosition.xz) (NOT the split camera, so the
-    // two passes agree bit-for-bit), same +128 centre.
-    ivec2 cell = ivec2(floor(world.xz) - floor(cameraPosition.xz)) + 128;
-    if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(256)))) {
+    // 3D tint cell (ahead-centred voxel region; scene_to_grass_tint_space is decoupled from the LPV
+    // size and is the SAME function the gbuffer read uses, so the two passes agree). The Y axis is
+    // what stops vertically-stacked grass blocks (same XZ) from sharing a slot.
+    vec3 vp = scene_to_grass_tint_space(scene_center);
+    if (any(lessThan(vp, vec3(0.0)))
+        || any(greaterThanEqual(vp, vec3(GRASS_TINT_SIZE)))) {
         return;
     }
+    ivec3 cell = ivec3(vp);
 
-    imageStore(grass_tint_img, cell, vec4(gl_Color.rgb, 1.0));
+    // Which of the top's 4 corners is this vertex? at_midBlock points from the vertex to the block
+    // centre (world-axis-aligned for terrain), so its sign gives the corner: at_midBlock.x < 0 =>
+    // the vertex sits on the +X side, etc. Each corner writes its OWN texel in the block's 2x2 XZ
+    // tile within its Y layer - no shared slot, so race-free with no atomics.
+    ivec2 corner = ivec2(at_midBlock.x < 0.0 ? 1 : 0, at_midBlock.z < 0.0 ? 1 : 0);
+    imageStore(grass_tint_img,
+               ivec3(cell.x * 2 + corner.x, cell.z * 2 + corner.y, cell.y),
+               vec4(gl_Color.rgb, 1.0));
 
     // The grass_top atlas tile is identical for every grass block, so one shared
     // cell is enough; side-grown blades sample the real grass texture from it.

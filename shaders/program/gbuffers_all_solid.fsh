@@ -366,17 +366,43 @@ void main() {
     cherry_is_blade = material_mask == MATERIAL_SMALL_PLANTS;
 #endif
     if (!cherry_is_blade) {
-        // Stable per-texel key. Two things are load-bearing: (1) the Iris SPLIT camera
-        // (exact integer world texel cameraPositionInt*16 + precise sub-texel offset), so
-        // the collapsed world's ~1-ULP wobble can't flip floor() far from spawn; (2) the
-        // +0.5, because block FACES sit on integer world coords, which land EXACTLY on a
-        // *16 texel boundary - floor() there flips on the tiniest reconstruction wobble
-        // (top face under VERTICAL motion, a side under HORIZONTAL motion). +0.5 centres
-        // integer coords mid-cell, off the boundary. See CLAUDE.md gotchas #5 and #13.
-        ivec3 cherry_texel = cameraPositionInt * 16
-            + ivec3(floor((scene_pos + cameraPositionFract) * 16.0 + 0.5));
+        // Stable, texture-ALIGNED per-texel key. Load-bearing pieces: (1) the Iris SPLIT camera
+        // (exact integer world texel cameraPositionInt*16 + precise sub-texel offset), so the
+        // collapsed world's ~1-ULP wobble can't flip floor() far from spawn; (2) the +0.5 guard -
+        // but ONLY on the face-NORMAL axis. A face sits on an integer world coord along its normal,
+        // landing EXACTLY on a *16 texel boundary where floor() flips under the tiniest reconstruction
+        // wobble (top face under VERTICAL motion, a side under HORIZONTAL) - +0.5 there centres it
+        // mid-cell. Adding +0.5 on the IN-PLANE axes instead shifts the dither grid half a texel off
+        // the TEXTURE grid, so each texture texel straddles two dither cells and the recolor splits it
+        // in half. Guarding the normal axis ONLY keeps the in-plane cells aligned to texels. See
+        // CLAUDE.md gotchas #5 and #13.
+        vec3 cherry_offset = 0.5 * abs(round(tbn[2]));
+        vec3 cherry_wpos = (scene_pos + cameraPositionFract) * 16.0 + cherry_offset;
+        ivec3 cherry_texel = cameraPositionInt * 16 + ivec3(floor(cherry_wpos));
+
+        // WHOLE-TEXEL recolor: evaluate the pink-probability at the TEXEL CENTRE, not per-pixel.
+        // The dither roll is already constant per texel, but the probability comes from the biome
+        // tint, which varies per-pixel - so without this the pink/green boundary follows the smooth
+        // biome gradient and cuts a diagonal across the texel (the "triangles"). The tint is affine
+        // on the planar face, so extrapolate it from this pixel to the texel centre using screen
+        // derivatives (taken in uniform control flow, before the branch), which makes the probability
+        // - and thus the whole texel's choice - constant. The offset is sub-texel, so the nudge is
+        // bounded by the real biome gradient (no false recolor of other grass), and the det test is
+        // scale-invariant so it works at any distance (skips only grazing/degenerate frames).
+        vec3 to_center = (vec3(0.5) - fract(cherry_wpos)) * (1.0 / 16.0);
+        vec3 dpdx = dFdx(scene_pos), dpdy = dFdy(scene_pos);
+        vec3 dtdx = dFdx(cherry_tint.rgb), dtdy = dFdy(cherry_tint.rgb);
+        float a11 = dot(dpdx, dpdx), a12 = dot(dpdx, dpdy), a22 = dot(dpdy, dpdy);
+        float det = a11 * a22 - a12 * a12;
+        vec3 tint_at_texel = cherry_tint.rgb;
+        if (det > 1e-6 * a11 * a22) {
+            float b1 = dot(to_center, dpdx), b2 = dot(to_center, dpdy);
+            float u = (b1 * a22 - b2 * a12) / det;
+            float v = (a11 * b2 - a12 * b1) / det;
+            tint_at_texel += u * dtdx + v * dtdy;
+        }
         cherry_tint.rgb = cherry_grove_pink_grass(
-            cherry_tint.rgb, material_mask, cherry_grove_dither(vec3(cherry_texel))
+            tint_at_texel, material_mask, cherry_grove_dither(vec3(cherry_texel))
         );
     }
     base_color = read_tex(gtexture) * cherry_tint;

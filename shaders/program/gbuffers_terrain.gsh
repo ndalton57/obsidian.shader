@@ -132,10 +132,11 @@ layout(r32ui) coherent uniform uimage3D grass_face_img_a;
 layout(r32ui) coherent uniform uimage3D grass_face_img_b;
 #endif
 #endif
-// Shader Grass: per-block grass-block top tint + shared grass_top atlas tile,
-// filled by the shadow pass (see update_grass_tint). Lets side-grown blades take
-// the real top colour, identical to top-grown blades (no colour pop while moving).
-uniform sampler2D grass_tint_sampler;
+// Shader Grass: per-block grass-block TOP tint (4 corners - a 2x2 XZ tile per block in a 3D
+// world-keyed buffer) + the shared grass_top atlas tile, filled by the shadow pass (see
+// update_grass_tint). BOTH top and side growers reproduce a blade's colour from these 4 corners
+// (grass_top_tint_reproduce), so it's identical whichever face grows the blade.
+uniform sampler3D grass_tint_sampler;
 uniform sampler2D grass_tile_sampler;
 #include "/include/lighting/lpv/voxelization.glsl"
 #include "/include/misc/grass_election.glsl"
@@ -177,6 +178,35 @@ uint grass_read_voxel(vec3 scene_p) {
     }
     return texelFetch(voxel_sampler, ivec3(vp), 0).x & 127u;
 }
+
+#if PROCEDURAL_GEOMETRY_MODE >= 2 && defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Shader Grass: reproduce a grass-block top's per-position biome colour by bilinearly blending
+// the 4 corner tints the shadow pass captured (grass_tint_sampler, a 2x2 tile of texels per
+// block - see update_grass_tint). f_pos is the [0, 1] world-XZ position within the block top.
+// Returns false (leave the caller's fallback) when the block wasn't captured this frame. Side
+// growers need this (their own gl_Color is the dirt side); top growers use it too, so every grass
+// face colours its blades by the same method.
+bool grass_top_tint_reproduce(vec3 block_center, vec2 f_pos, out vec3 result) {
+    result = vec3(0.0);
+    vec3 vp = scene_to_grass_tint_space(block_center);
+    if (any(lessThan(vp, vec3(0.0)))
+        || any(greaterThanEqual(vp, vec3(GRASS_TINT_SIZE)))) {
+        return false;
+    }
+    ivec3 cell = ivec3(vp);
+    ivec2 base = ivec2(cell.x * 2, cell.z * 2);
+    int layer = cell.y;
+    vec3 c00 = texelFetch(grass_tint_sampler, ivec3(base.x,     base.y,     layer), 0).rgb; // -X -Z
+    vec3 c10 = texelFetch(grass_tint_sampler, ivec3(base.x + 1, base.y,     layer), 0).rgb; // +X -Z
+    vec3 c01 = texelFetch(grass_tint_sampler, ivec3(base.x,     base.y + 1, layer), 0).rgb; // -X +Z
+    vec3 c11 = texelFetch(grass_tint_sampler, ivec3(base.x + 1, base.y + 1, layer), 0).rgb; // +X +Z
+    if (dot(c00 + c10 + c01 + c11, vec3(1.0)) < 1e-3) {
+        return false; // not captured this frame
+    }
+    result = mix(mix(c00, c10, f_pos.x), mix(c01, c11, f_pos.x), f_pos.y);
+    return true;
+}
+#endif
 
 #ifdef SHADER_GRASS
 // Shader Grass: the baked decal-proximity field (filled by program/grass_bushiness.csh).
@@ -590,33 +620,31 @@ void main() {
     }
 
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
-    // grass_top TEXTURE, sampled the SAME way for top AND side growers - this is the top<->side
-    // colour-jump fix. A top grower's own uv is the grass_top in the FACE's uv orientation; a side
-    // grower's own uv is the grass-block DIRT side. Those don't line up, so the texel (green shade)
-    // popped at the switch. Instead, sample the shared grass_top tile at the blade's POSITION on the
-    // block top (f_pos) for BOTH - the side and top positions agree now that the relabel is winding-
-    // aware, so they land on the IDENTICAL texel. It's also a SMOOTH position map (NO hash), so
-    // clump's tiny per-frame LOD wobble can't be amplified into a texel flicker. f_pos = clump.xz -
-    // bc.xz + 0.5 (the lossy camera cancels in the subtraction -> frame-stable far from spawn).
+    // f_pos: the blade's position within the block top, in [0, 1] world-XZ (the lossy camera
+    // cancels in clump.xz - bc.xz, so it's frame-stable far from spawn). Drives both the grass_top
+    // texture UV and the corner-tint colour blend below.
+    vec2 f_pos = clamp(clump.xz - bc.xz + 0.5, 0.0, 1.0);
+
+    // grass_top TEXTURE, sampled the SAME way for top AND side growers. A grower's own uv is its
+    // OWN face (a side grower's is the grass-block DIRT side), and those don't line up across faces,
+    // so the texel popped at a top<->side switch. Instead sample the shared grass_top tile at the
+    // blade's POSITION on the block top (f_pos) for BOTH, so they land on the IDENTICAL texel. It is
+    // a SMOOTH position map (NO hash), so clump's tiny per-frame LOD wobble can't flicker the texel.
     vec4 grass_tile = texelFetch(grass_tile_sampler, ivec2(0), 0);
     if (grass_tile.z > 1e-4 && grass_tile.w > 1e-4) {
-        vec2 f_pos = clamp(clump.xz - bc.xz + 0.5, 0.0, 1.0);
         guv = grass_tile.xy + grass_tile.zw * f_pos;
     }
-    // COLOUR: a side grower's own gl_Color is the dirt side, so borrow the top's gl_Color from the
-    // per-block buffer the shadow pass fills (camera-relative cell, matching the shadow write
-    // bit-for-bit). Top growers already carry the correct top gl_Color in v_in; the buffer stores the
-    // same gl_Color, so the two paths land on the same colour at the switch.
-    if (abs(v_in[0].tbn[2].y) < 0.5) { // side grower
-        vec3 cw = bc + cameraPosition; // block-center world, matching the shadow pass
-        ivec2 tcell = ivec2(floor(cw.xz) - floor(cameraPosition.xz)) + 128;
-        if (all(greaterThanEqual(tcell, ivec2(0)))
-            && all(lessThan(tcell, ivec2(256)))) {
-            vec3 top_tint = texelFetch(grass_tint_sampler, tcell, 0).rgb;
-            if (dot(top_tint, vec3(1.0)) > 1e-3) { // 0 => not captured; keep dirt-side fallback
-                src_tint.rgb = top_tint;
-            }
-        }
+
+    // COLOUR: reproduce the grass-block top's per-position biome colour by bilinearly blending the
+    // 4 corner tints the shadow pass captured (grass_top_tint_reproduce). BOTH top and side growers
+    // use it, so a blade's colour is identical whichever face grew it - and stays consistent even if
+    // a mod alters Minecraft's own per-vertex interpolation (both faces share this one method). Falls
+    // back to the live per-vertex tint when the block wasn't captured this frame: correct for a top
+    // grower (its own tint IS the real top colour); a side grower then shows its dirt-side tint, but
+    // an uncaptured block is rare (outside the shadow range).
+    vec3 repro;
+    if (grass_top_tint_reproduce(bc, f_pos, repro)) {
+        src_tint.rgb = repro;
     }
 #endif
 
@@ -627,11 +655,17 @@ void main() {
     // single float wobbles ~1 ULP as the camera moves and cherry_grove_dither (a hash)
     // amplifies the wobble, flipping the pink/green pick at the biome border while moving
     // (worse far from spawn). See CLAUDE.md (split-camera dither/hash key). Per-blade (not
-    // per-block) makes a transition block sprout a MIX of pink and green blades. src_tint
-    // is the grass-block top's colour (own gl_Color for a top grower, or the shadow-pass
-    // buffer for a side grower) - the one place a blade's colour is set.
-    ivec2 cg_key = cameraPositionInt.xz * 256
-        + ivec2(floor((clump.xz + cameraPositionFract.xz) * 256.0));
+    // per-block) makes a transition block sprout a MIX of pink and green blades. src_tint is the
+    // grass-block top's colour - reproduced from the 4-corner buffer for BOTH top and side growers
+    // (grass_top_tint_reproduce above) - the one place a blade's colour is set.
+    // Quantise to a 1/64-block grid (NOT finer): raw-tessellation blades drift as the camera
+    // moves, and on a finer grid a drifting blade crosses cell boundaries more often, re-rolling
+    // its hash and occasionally flipping pink<->green for a frame (a lone-blade flicker, only under
+    // motion - a still camera never shows it). 64 cells/block per axis is still far more than the
+    // blades on a block, so the per-blade speckle is unchanged, but boundary crossings - and the
+    // flicker - are ~4x rarer.
+    ivec2 cg_key = cameraPositionInt.xz * 64
+        + ivec2(floor((clump.xz + cameraPositionFract.xz) * 64.0));
     src_tint.rgb = cherry_grove_pink_grass(
         src_tint.rgb, v_in[0].material_mask, cherry_grove_dither(vec2(cg_key))
     );

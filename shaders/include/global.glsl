@@ -97,6 +97,15 @@
 // GRASS_RANGE past ~146. See CLAUDE.md gotcha #9.
 #define GRASS_MASK_SIZE 256
 
+// Shader Grass: footprint of the per-block TOP-tint buffer - a GRASS_TINT_SIZE^3 voxel region,
+// ahead-centred like the LPV, storing each grass block's 4 top-corner biome tints (a 2*N x 2*N x N
+// rgba16f image) so side-grown blades bilinearly reproduce the top's smooth colour. Keyed in 3D
+// (X/Y/Z) so vertically-stacked grass blocks never share a slot. DECOUPLED from VOXEL_VOLUME_SIZE so
+// the colored-lights resolution doesn't size it; at the default VOXEL_VOLUME_SIZE the two regions
+// coincide. MUST match grass_tint_img in shaders.properties (2*N x 2*N x N). 128 -> ~64 MB; far
+// side-growers outside this region (only when VOXEL_VOLUME_SIZE exceeds it) fall back to their own tint.
+#define GRASS_TINT_SIZE 128
+
 // Compatibility fixes
 
 #if MC_VERSION < 11700
