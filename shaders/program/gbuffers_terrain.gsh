@@ -568,9 +568,9 @@ void main() {
 #if PROCEDURAL_GEOMETRY_MODE >= 2
     // RAW TESSELLATION placement: one blade per sub-triangle at its own position (no
     // grid), so the tessellator does distance LOD for free. The grower can be a SIDE, so
-    // relabel the sub-triangle's two in-plane coords onto the block TOP - WINDING-AWARE (see
-    // below), so EVERY face lands its blades in the same top positions and a grower swap does
-    // NOT move them. grass always grows from the top plane.
+    // relabel the sub-triangle's two in-plane coords onto the block TOP so EVERY face lands
+    // its blades in the same top positions and a grower swap does NOT move them. Grass
+    // always grows from the top plane.
     {
         vec3 bmin = bc - 0.5;
         vec3 an = abs(v_in[0].tbn[2]);
@@ -578,23 +578,30 @@ void main() {
         float xl = tri_center.x - bmin.x;
         float yl = tri_center.y - bmin.y;
         float zl = tri_center.z - bmin.z;
-        // Relabel the grower face's two in-plane axes onto the top's (X, Z). The blades must land in
-        // the SAME top positions whichever face grows them, so a top<->side swap (or a side<->side
-        // swap, once the election is first-come) doesn't MOVE them. Catch: Minecraft winds each face
-        // CCW-outward, which MIRRORS the in-plane HORIZONTAL axis between opposite faces (height is
-        // unaffected - up is up). The relabel uses actual interpolated positions, so it inherits that
-        // mirror: two of the four sides tessellate mirror-imaged vs the top and their blades JUMP on
-        // the swap (observed in-game: +Z and -X jump; -Z and +X already match). Un-mirror those two
-        // by reflecting their preserved-horizontal coord (1 - coord) so every face maps on identically.
+        // Map the grower face's two in-plane coords onto the top's (X, Z) with ONE rule shared
+        // by all four sides, so their sub-triangle patterns land on the IDENTICAL top positions
+        // and a side<->side (or top<->side) grower swap can't shift a blade. Block-local HEIGHT
+        // goes to the top's X on EVERY side; the face's ALONG-EDGE position goes to the top's Z,
+        // measured in one consistent around-the-block sense (cross(outward_normal, up):
+        // +X->+z, -X->-z, +Z->-x, -Z->+x). Sending height to the SAME top axis for all four
+        // sides is the fix: the old relabel sent height to X on the X-faces but to Z on the
+        // Z-faces, and that axis transposition is an orientation flip, so two adjacent sides
+        // tessellated mirror-imaged and their blades shifted on a swap.
         float fx, fz;
-        if (an.y > 0.5) {        // top / bottom: X,Z -> X,Z
-            fx = xl; fz = zl;
-        } else if (an.x > 0.5) { // +/-X face: height(Y) -> X, in-plane horizontal(Z) -> Z
-            fx = yl;
-            fz = (v_in[0].tbn[2].x < 0.0) ? (1.0 - zl) : zl; // -X's Z is the mirrored one
-        } else {                 // +/-Z face: in-plane horizontal(X) -> X, height(Y) -> Z
-            fx = (v_in[0].tbn[2].z > 0.0) ? (1.0 - xl) : xl; // +Z's X is the mirrored one
-            fz = yl;
+        if (an.y > 0.5) {
+            // Top / bottom: swap X and Z so the top quad's tessellation diagonal lines up
+            // with the four sides' (which now share one orientation). The face is already
+            // the X-Z plane, but Minecraft splits the top quad on the opposite diagonal
+            // from a side quad, so without the swap a top<->side grower swap shifts blades.
+            fx = zl;
+            fz = xl;
+        } else {
+            fx = yl; // height -> top X (same rule for every side)
+            if (an.x > 0.5) {
+                fz = (v_in[0].tbn[2].x > 0.0) ? zl : (1.0 - zl); // +X / -X
+            } else {
+                fz = (v_in[0].tbn[2].z > 0.0) ? (1.0 - xl) : xl; // +Z / -Z
+            }
         }
         vec2 f = clamp(vec2(fx, fz), 0.0, 1.0);
 
