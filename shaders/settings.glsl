@@ -41,7 +41,8 @@ const float wetnessHalflife         = 70.0;
   //                (cheaper; blind to fully-enclosed blocks).
   //   3 Mask     - a shadow-pass mask confirms each face was meshed (handles enclosed/
   //                overhead blocks; still can't see the camera's per-section culling).
-  //   4 Camera   - grows only from faces the CAMERA actually draws (no pop-out; ~free).
+  //   4 Race     - the first drawn face of a block CLAIMS it and grows (first-come; whichever
+  //                face the GPU rasterises first wins, current-frame, no pop-out, no lag).
   // Modes 2+ need Colored Lights. Default 4. See CLAUDE.md gotcha #9.
   #define PROCEDURAL_GEOMETRY_MODE 4 // [1 2 3 4]
   // Z-fight fix for grass-block sides: pushes the tessellated dirt base a hair behind the

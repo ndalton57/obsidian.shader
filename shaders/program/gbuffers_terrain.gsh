@@ -116,59 +116,28 @@ uniform usampler3D voxel_sampler;
 #if PROCEDURAL_GEOMETRY_MODE == 3
 uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow pass)
 #elif PROCEDURAL_GEOMETRY_MODE >= 4
-// Mode 4 (Camera): the per-block face bitmask is DOUBLE-BUFFERED (A/B, ping-ponged by frameCounter
-// parity) so the election READS the buffer the pass is NOT writing this frame. Reading a buffer the
-// same pass also atomically WRITES returned unstable values (the old single buffer leaned on a
-// "texture read sees last frame" trick that isn't guaranteed once the write is an atomic) -> grass
-// above eye level flickered. Two buffers = a clean cross-frame hand-off. frameCounter drives both the
-// stamp and the parity. BOTH terrain programs compile the election read, so both declare the
-// samplers; only the SOLID program WRITES (its grass-block passthrough) via imageAtomicCompSwap -
-// image atomics need GL_ARB_shader_image_load_store (#version 400), enabled in the solid GS stub.
+// Mode 4 (Race / FCFS): a SINGLE per-block claim buffer. The first drawn face to reach the TCS this
+// frame CAS-claims its block; this GS only READS the winner, via a COHERENT imageLoad (which sees the
+// in-pass atomic write that a sampler read would miss - this is what makes a single same-frame buffer
+// correct). frameCounter drives the per-frame stamp; both terrain programs compile the
+// election, but only the SOLID program touches the image (the cutout never grows blades, so its
+// grass_claim is stubbed) - image atomics need GL_ARB_shader_image_load_store (#version 400), enabled
+// in the solid GS + TCS stubs.
 uniform int frameCounter;
-uniform usampler3D grass_face_sampler_a;
-uniform usampler3D grass_face_sampler_b;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-layout(r32ui) coherent uniform uimage3D grass_face_img_a;
-layout(r32ui) coherent uniform uimage3D grass_face_img_b;
+layout(r32ui) coherent uniform uimage3D grass_claim_img;
 #endif
 #endif
-// Shader Grass: per-block grass-block TOP tint (4 corners - a 2x2 XZ tile per block in a 3D
-// world-keyed buffer) + the shared grass_top atlas tile, filled by the shadow pass (see
-// update_grass_tint). BOTH top and side growers reproduce a blade's colour from these 4 corners
-// (grass_top_tint_reproduce), so it's identical whichever face grows the blade.
+// Shader Grass: per-block grass-block TOP tint AND lightmap (4 corners each - a 2x2 XZ tile per block
+// in a 3D world-keyed buffer) + the shared grass_top atlas tile, filled by the shadow pass (see
+// update_grass_tint). BOTH top and side/bottom growers reproduce a blade's colour AND brightness from
+// these corners (grass_top_reproduce), so both are identical whichever face grows the blade - which is
+// what keeps them stable as the FCFS grower races between faces.
 uniform sampler3D grass_tint_sampler;
+uniform sampler3D grass_light_sampler;
 uniform sampler2D grass_tile_sampler;
 #include "/include/lighting/lpv/voxelization.glsl"
 #include "/include/misc/grass_election.glsl"
-
-#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 4 && defined PROGRAM_GBUFFERS_TERRAIN_SOLID
-// Accumulate one camera-drawn face into THIS block's OWN cell. The cell is an r32ui: high bits =
-// frame stamp, low 6 = face bitmask. CAS loop: if the cell's stamp is stale (a new frame) RESET the
-// mask to just this face; else OR this face in. Bounded for GPU safety; at most 6 faces ever share
-// a cell (usually 1-3 drawn) so it converges in ~1-2 iterations.
-void grass_stamp_face(ivec3 cell, uint face_bit) {
-    uint stamp = grass_stamp_now();
-    bool even = (frameCounter & 1) == 0; // even frame -> WRITE A (election reads B); odd -> WRITE B
-    uint cur = even ? imageLoad(grass_face_img_a, cell).x
-                    : imageLoad(grass_face_img_b, cell).x;
-    for (int i = 0; i < 8; ++i) {
-        uint desired = ((cur >> 6) == stamp) ? (cur | face_bit) : ((stamp << 6) | face_bit);
-        if (desired == cur) {
-            return; // this face already recorded this frame
-        }
-        uint prev;
-        if (even) { // explicit branch: only ONE buffer is ever written this frame (not a ternary)
-            prev = imageAtomicCompSwap(grass_face_img_a, cell, cur, desired);
-        } else {
-            prev = imageAtomicCompSwap(grass_face_img_b, cell, cur, desired);
-        }
-        if (prev == cur) {
-            return; // won the swap
-        }
-        cur = prev; // retry against the value the winner left
-    }
-}
-#endif
 
 // Voxelized block material at a scene-space position (0 = air / outside volume).
 uint grass_read_voxel(vec3 scene_p) {
@@ -180,14 +149,18 @@ uint grass_read_voxel(vec3 scene_p) {
 }
 
 #if PROCEDURAL_GEOMETRY_MODE >= 2 && defined PROGRAM_GBUFFERS_TERRAIN_SOLID
-// Shader Grass: reproduce a grass-block top's per-position biome colour by bilinearly blending
-// the 4 corner tints the shadow pass captured (grass_tint_sampler, a 2x2 tile of texels per
-// block - see update_grass_tint). f_pos is the [0, 1] world-XZ position within the block top.
-// Returns false (leave the caller's fallback) when the block wasn't captured this frame. Side
-// growers need this (their own gl_Color is the dirt side); top growers use it too, so every grass
-// face colours its blades by the same method.
-bool grass_top_tint_reproduce(vec3 block_center, vec2 f_pos, out vec3 result) {
-    result = vec3(0.0);
+// Shader Grass: reproduce a grass-block top's per-position biome colour AND lightmap by bilinearly
+// blending the 4 corner texels the shadow pass captured (grass_tint_sampler = biome tint,
+// grass_light_sampler = lightmap with block in R, sky in G; a 2x2 tile per block - see
+// update_grass_tint). f_pos is the [0, 1] world-XZ position within the block top. Returns false (leave
+// the caller's fallback) when the block wasn't captured this frame. Side/bottom growers need this
+// (their own gl_Color is the dirt side and their lightmap is the side's); top growers use it too, so
+// every grass face colours AND lights its blades the same way - which is what keeps colour and
+// brightness stable as the FCFS grower races between faces. (Captured-detection keys off the tint
+// only; the two buffers are written together, so a captured tint means a captured light.)
+bool grass_top_reproduce(vec3 block_center, vec2 f_pos, out vec3 tint, out vec2 light) {
+    tint = vec3(0.0);
+    light = vec2(0.0);
     vec3 vp = scene_to_grass_tint_space(block_center);
     if (any(lessThan(vp, vec3(0.0)))
         || any(greaterThanEqual(vp, vec3(GRASS_TINT_SIZE)))) {
@@ -196,14 +169,19 @@ bool grass_top_tint_reproduce(vec3 block_center, vec2 f_pos, out vec3 result) {
     ivec3 cell = ivec3(vp);
     ivec2 base = ivec2(cell.x * 2, cell.z * 2);
     int layer = cell.y;
-    vec3 c00 = texelFetch(grass_tint_sampler, ivec3(base.x,     base.y,     layer), 0).rgb; // -X -Z
-    vec3 c10 = texelFetch(grass_tint_sampler, ivec3(base.x + 1, base.y,     layer), 0).rgb; // +X -Z
-    vec3 c01 = texelFetch(grass_tint_sampler, ivec3(base.x,     base.y + 1, layer), 0).rgb; // -X +Z
-    vec3 c11 = texelFetch(grass_tint_sampler, ivec3(base.x + 1, base.y + 1, layer), 0).rgb; // +X +Z
-    if (dot(c00 + c10 + c01 + c11, vec3(1.0)) < 1e-3) {
+    vec3 t00 = texelFetch(grass_tint_sampler, ivec3(base.x,     base.y,     layer), 0).rgb; // -X -Z
+    vec3 t10 = texelFetch(grass_tint_sampler, ivec3(base.x + 1, base.y,     layer), 0).rgb; // +X -Z
+    vec3 t01 = texelFetch(grass_tint_sampler, ivec3(base.x,     base.y + 1, layer), 0).rgb; // -X +Z
+    vec3 t11 = texelFetch(grass_tint_sampler, ivec3(base.x + 1, base.y + 1, layer), 0).rgb; // +X +Z
+    if (dot(t00 + t10 + t01 + t11, vec3(1.0)) < 1e-3) {
         return false; // not captured this frame
     }
-    result = mix(mix(c00, c10, f_pos.x), mix(c01, c11, f_pos.x), f_pos.y);
+    tint = mix(mix(t00, t10, f_pos.x), mix(t01, t11, f_pos.x), f_pos.y);
+    vec2 l00 = texelFetch(grass_light_sampler, ivec3(base.x,     base.y,     layer), 0).rg;
+    vec2 l10 = texelFetch(grass_light_sampler, ivec3(base.x + 1, base.y,     layer), 0).rg;
+    vec2 l01 = texelFetch(grass_light_sampler, ivec3(base.x,     base.y + 1, layer), 0).rg;
+    vec2 l11 = texelFetch(grass_light_sampler, ivec3(base.x + 1, base.y + 1, layer), 0).rg;
+    light = mix(mix(l00, l10, f_pos.x), mix(l01, l11, f_pos.x), f_pos.y);
     return true;
 }
 #endif
@@ -454,23 +432,15 @@ void main() {
         vec3 bc = v_in[0].block_center;
         bool in_range = dot(bc, bc) < (GRASS_RANGE * GRASS_RANGE);
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
-        // Modes 2+: this face grows iff it's the elected grower of an exposed grass
-        // block (lets grass survive Sodium culling the top face).
+        // Modes 2+: this face grows iff it's the chosen grower of an exposed grass
+        // block (lets grass survive Sodium culling the top face). In mode 4 (Race) this
+        // reads the FCFS claim the TCS already made - the first drawn face to reach the
+        // TCS won the block, and every other face of it backs off here.
         make_grass = in_range && grass_air_above(bc)
             && grass_is_grower(bc, v_in[0].tbn[2]);
 #else
         // Mode 1 (Top Only): grass-block tops only (world normal up).
         make_grass = in_range && v_in[0].tbn[2].y > 0.9;
-#endif
-#if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 4
-        // CAMERA-PASS MASK (mode 4): every grass-block face that reaches this GS was drawn by the
-        // CAMERA (Sodium already culled the rest). Record THIS face's bit into the block's OWN cell
-        // (grass_mask_cell(bc), ABSOLUTE world index so it's frame-stable). Only this block ever
-        // writes its own cell, so NEXT frame's election reads an UNAMBIGUOUS per-block face bitmask
-        // - no 6-way air-cell sharing (which false-positived the top and sides). See CLAUDE.md.
-        if (in_range) {
-            grass_stamp_face(grass_mask_cell(bc), grass_face_bit(round(v_in[0].tbn[2])));
-        }
 #endif
     }
 #else
@@ -651,15 +621,21 @@ void main() {
     }
 
     // COLOUR: reproduce the grass-block top's per-position biome colour by bilinearly blending the
-    // 4 corner tints the shadow pass captured (grass_top_tint_reproduce). BOTH top and side growers
+    // 4 corner tints the shadow pass captured (grass_top_reproduce). BOTH top and side growers
     // use it, so a blade's colour is identical whichever face grew it - and stays consistent even if
     // a mod alters Minecraft's own per-vertex interpolation (both faces share this one method). Falls
     // back to the live per-vertex tint when the block wasn't captured this frame: correct for a top
     // grower (its own tint IS the real top colour); a side grower then shows its dirt-side tint, but
     // an uncaptured block is rare (outside the shadow range).
     vec3 repro;
-    if (grass_top_tint_reproduce(bc, f_pos, repro)) {
+    vec2 repro_light;
+    if (grass_top_reproduce(bc, f_pos, repro, repro_light)) {
         src_tint.rgb = repro;
+        // Light the blade by the TOP's lightmap (block + sky), not the racing grower face's, so blade
+        // brightness is identical whichever face wins the FCFS claim - no flicker. Worst without this
+        // in the dark (block light near a torch) and in shade (skylight), where the lightmap IS the
+        // lighting and the sun term isn't there to mask the face-to-face difference.
+        gll = repro_light;
     }
 #endif
 
@@ -672,7 +648,7 @@ void main() {
     // (worse far from spawn). See CLAUDE.md (split-camera dither/hash key). Per-blade (not
     // per-block) makes a transition block sprout a MIX of pink and green blades. src_tint is the
     // grass-block top's colour - reproduced from the 4-corner buffer for BOTH top and side growers
-    // (grass_top_tint_reproduce above) - the one place a blade's colour is set.
+    // (grass_top_reproduce above) - the one place a blade's colour is set.
     // Quantise to a 1/64-block grid (NOT finer): raw-tessellation blades drift as the camera
     // moves, and on a finer grid a drifting blade crosses cell boundaries more often, re-rolling
     // its hash and occasionally flipping pink<->green for a frame (a lone-blade flicker, only under

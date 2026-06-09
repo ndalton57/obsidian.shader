@@ -72,9 +72,10 @@ writeonly uniform uimage3D voxel_img;
 writeonly uniform uimage3D grass_face_img;
 #endif
 
-// Shader Grass: grass-block TOP corner tints (2x2 per block, 3D-keyed) + shared grass_top
-// atlas tile (see update_grass_tint in voxelization.glsl).
+// Shader Grass: grass-block TOP corner tints (2x2 per block, 3D-keyed) + matching corner LIGHT
+// (block in R, sky in G) + shared grass_top atlas tile (see update_grass_tint in voxelization.glsl).
 writeonly uniform image3D grass_tint_img;
+writeonly uniform image3D grass_light_img;
 writeonly uniform image2D grass_tile_img;
 
 uniform int renderStage;

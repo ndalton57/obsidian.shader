@@ -47,7 +47,7 @@ bool is_inside_voxel_volume(vec3 voxel_pos) {
 // Shader Grass: ahead-centred cell for the per-block TOP tint buffer. Mirrors scene_to_voxel_space
 // but uses GRASS_TINT_SIZE, so the tint buffer is DECOUPLED from the LPV's VOXEL_VOLUME_SIZE (the
 // colored-lights resolution doesn't size it). At the default VOXEL_VOLUME_SIZE the two coincide. Used
-// by BOTH the shadow-pass write (update_grass_tint) and the gbuffer read (grass_top_tint_reproduce),
+// by BOTH the shadow-pass write (update_grass_tint) and the gbuffer read (grass_top_reproduce),
 // so it lives here as the one shared definition. Same-frame (written then read within a frame), so the
 // camera-relative fract(cameraPosition) and look-direction centre are consistent across the two passes.
 vec3 scene_to_grass_tint_space(vec3 scene_pos) {
@@ -179,17 +179,16 @@ void update_voxel_map(uint block_id) {
     }
 }
 
-// Shader Grass: snapshot each grass-block TOP's biome tint (gl_Color) + the shared
-// grass_top atlas tile into camera-relative buffers, so the grass geometry shader
-// can colour blades grown from ANY face with the real top colour. The sun renders
-// every top each frame, and this VSH image store is NOT depth tested, so the tint
-// is captured even when the top is occluded from the sun or culled for the player
-// camera. Storing the literal gl_Color means biome + biome-blend mods are tracked
-// exactly. The tint is stored per CORNER - a 2x2 XZ tile of texels per block, indexed by
-// the sign of at_midBlock - in a 3D buffer keyed by block X/Y/Z, so each of the 4 top
-// vertices writes its OWN texel (race-free, no atomics) AND vertically-stacked grass blocks
-// never share a slot. The grass shader then bilinearly blends the 4 corners to reproduce the
-// top's smooth per-position biome colour for blades grown on any face.
+// Shader Grass: snapshot each grass-block TOP's biome tint (gl_Color) AND lightmap (block + sky)
+// + the shared grass_top atlas tile into camera-relative buffers, so the grass geometry shader can
+// colour AND light blades grown from ANY face with the real top values. The sun renders every top
+// each frame, and this VSH image store is NOT depth tested, so they are captured even when the top is
+// occluded from the sun or culled for the player camera. Storing the literal gl_Color means biome +
+// biome-blend mods are tracked exactly. Tint and light are stored per CORNER - a 2x2 XZ tile of texels
+// per block, indexed by the sign of at_midBlock - in 3D buffers keyed by block X/Y/Z, so each of the 4
+// top vertices writes its OWN texel (race-free, no atomics) AND vertically-stacked grass blocks never
+// share a slot. The grass shader bilinearly blends the 4 corners to reproduce the top's smooth
+// per-position colour and brightness for blades grown on any face.
 void update_grass_tint(uint block_id) {
     if (block_id != 81u) { // MATERIAL_GRASS_BLOCK
         return;
@@ -217,9 +216,15 @@ void update_grass_tint(uint block_id) {
     // the vertex sits on the +X side, etc. Each corner writes its OWN texel in the block's 2x2 XZ
     // tile within its Y layer - no shared slot, so race-free with no atomics.
     ivec2 corner = ivec2(at_midBlock.x < 0.0 ? 1 : 0, at_midBlock.z < 0.0 ? 1 : 0);
-    imageStore(grass_tint_img,
-               ivec3(cell.x * 2 + corner.x, cell.z * 2 + corner.y, cell.y),
-               vec4(gl_Color.rgb, 1.0));
+    ivec3 store_cell = ivec3(cell.x * 2 + corner.x, cell.z * 2 + corner.y, cell.y);
+    imageStore(grass_tint_img, store_cell, vec4(gl_Color.rgb, 1.0));
+    // Companion LIGHT buffer: the TOP's lightmap (block in R, sky in G) per corner. A side/bottom
+    // grower reproduces THIS for its blades instead of using its own (racing FCFS) face's lightmap,
+    // so blade brightness doesn't flicker as the winner changes - worst in dark/shade, where the
+    // lightmap IS the lighting. gl_MultiTexCoord1.xy are the 0..240 lightmap coords; plain per-corner
+    // values, so they bilinear-blend like the tint.
+    vec2 top_light = clamp(gl_MultiTexCoord1.xy * (1.0 / 240.0), 0.0, 1.0);
+    imageStore(grass_light_img, store_cell, vec4(top_light, 0.0, 0.0));
 
     // The grass_top atlas tile is identical for every grass block, so one shared
     // cell is enough; side-grown blades sample the real grass texture from it.
@@ -234,9 +239,9 @@ void update_grass_tint(uint block_id) {
 // neighbour voxel read (blind to fully-enclosed blocks - see CLAUDE.md). Each rendered
 // grass-block face stamps the air cell it faces; the election reads block_center +
 // side_dir. Grass blocks within GRASS_RANGE only, to keep the write count down.
-// MODE 3 (Mask) ONLY: mode 4 (Camera) stamps the mask from the gbuffer GS instead (the shadow
-// pass can't see the camera's per-section direction culling), so it owns grass_face_img_a/b there
-// and this shadow-pass write must stay out of the way.
+// MODE 3 (Mask) ONLY: mode 4 (Race/FCFS) uses no shadow-pass mask at all - the grower is decided
+// in the gbuffer TCS as faces race through the pipeline and CAS-claim their block - so this
+// shadow-pass write is compiled out there.
 #if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
 void update_grass_faces(uint block_id) {
     if (block_id != 81u) { // MATERIAL_GRASS_BLOCK

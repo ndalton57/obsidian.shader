@@ -12,7 +12,7 @@
     1 Top Only  - tops only, no election (this file's helpers aren't even compiled).
     2 Deduced   - neighbour voxel read.
     3 Mask      - shadow-pass face mask.
-    4 Camera    - camera-pass face mask (default).
+    4 Race      - first drawn face to reach the pipeline claims the block (FCFS); default.
   Modes 2+ need COLORED_LIGHTS (the voxel volume) + voxelization.glsl included, and
   the includer must declare the samplers each mode uses. See CLAUDE.md gotcha #9.
 
@@ -43,75 +43,75 @@ bool grass_air_above(vec3 block_center) {
 }
 
 #if PROCEDURAL_GEOMETRY_MODE >= 4
-// ----- Mode 4 (Camera) -----
-// ABSOLUTE world-index texel for the camera face mask - the addressing that makes the mask
-// frame-stable. The mask is WRITTEN one frame and READ the next, so the cell for a block MUST
-// be identical on both frames despite camera motion. A camera-relative cell (scene_to_voxel_space,
-// or anything with fract(cameraPosition)) shifts by a texel every time floor(cameraPosition)
-// ticks - every block you WALK across and every head-bob in Y - so the read missed the write and
-// EVERY blade blinked off for that whole frame. The integer WORLD block index never moves.
-// Computed via the Iris split camera (exact far from spawn), mod GRASS_MASK_SIZE - the mask's
-// OWN size, DECOUPLED from the LPV voxel volume and big enough (256) that no two blocks within
-// GRASS_RANGE ever collide (2 * max range 100 < 256), so NO aliasing at any range, no fallback.
+// ----- Mode 4 (Race / FCFS) -----
+// The FIRST grass-block face to reach the terrain pipeline this frame CLAIMS the whole block and
+// grows its blades; every other face of that block backs off. The claim is written and read within
+// this SAME pass - decided and acted on immediately, no lag. Because the relabel plants every face's
+// blades at the IDENTICAL top positions, it does not matter WHICH face wins, so the winner can change
+// frame to frame with zero visible effect; and only DRAWN faces ever reach the pipeline, so a
+// camera-culled face is never chosen. The claim cell holds, packed in an r32ui,
+// (frame_stamp << 3) | winning_face_id (0..5).
+
+// ABSOLUTE world-index claim cell (Iris split camera, exact far from spawn). Absolute - not
+// camera-relative - so every face of one block hits the SAME texel; mod GRASS_MASK_SIZE, the claim's
+// OWN size (256) DECOUPLED from the LPV, big enough that no two blocks within GRASS_RANGE alias.
 ivec3 grass_mask_cell(vec3 scene_p) {
     ivec3 idx = cameraPositionInt + ivec3(floor(scene_p + cameraPositionFract));
     return ((idx % GRASS_MASK_SIZE) + GRASS_MASK_SIZE) % GRASS_MASK_SIZE;
 }
 
-// Per-frame stamp value in [1, 65520]. r16ui (cycles every 65520 frames, ~18 min) with 0 RESERVED
-// for "never written" so an uninitialised texel can't read as drawn. 65520 = 720720/11 divides
-// Iris's frameCounter wrap period (720720) EXACTLY, so the stamp cycle stays aligned with the wrap
-// - 65535/65536 would instead mis-age every block for one frame at each wrap (~3.3h). The GS write
-// and this read MUST use this same value.
+// Per-frame stamp, 0 RESERVED so an uninitialised (zero) cell never reads as claimed-this-frame.
+// The claim is same-frame, so the stamp's only job is telling "claimed this frame" from "stale".
 uint grass_stamp_now() {
-    return 1u + uint(frameCounter % 65520);
+    return 1u + uint(frameCounter);
 }
 
-// PER-BLOCK 6-bit FACE BITMASK, DOUBLE-BUFFERED (grass_face_img_a/b, ping-ponged by frame parity):
-// an r32ui per cell, high bits = frame stamp, low 6 = which of THIS block's faces the camera drew.
-// The GS writes a block's OWN cell (grass_mask_cell(bc)) via grass_stamp_face - and NOBODY else
-// writes that cell - so the read is UNAMBIGUOUS, unlike the air cell a face points into (which SIX
-// blocks' faces share). The election reads the buffer NOT written this frame (a clean cross-frame
-// hand-off; reading the buffer being atomically written THIS pass returned unstable values and
-// flickered grass above eye level). Sees Sodium's per-section + per-face camera-direction culling,
-// at a 1-frame lag. See CLAUDE.md (VERY IMPORTANT election).
-const uint GRASS_FACE_PX  = 1u << 0; // +x
-const uint GRASS_FACE_NX  = 1u << 1; // -x
-const uint GRASS_FACE_TOP = 1u << 2; // +y
-const uint GRASS_FACE_NY  = 1u << 3; // -y (bottom; elects on overhangs viewed from below)
-const uint GRASS_FACE_PZ  = 1u << 4; // +z
-const uint GRASS_FACE_NZ  = 1u << 5; // -z
-
-// Axis-unit normal -> its face bit (used by the GS write).
-uint grass_face_bit(vec3 dir) {
-    if (dir.y >  0.5) return GRASS_FACE_TOP;
-    if (dir.y < -0.5) return GRASS_FACE_NY;
-    if (dir.x >  0.5) return GRASS_FACE_PX;
-    if (dir.x < -0.5) return GRASS_FACE_NX;
-    if (dir.z >  0.5) return GRASS_FACE_PZ;
-    return GRASS_FACE_NZ;
+// Axis-unit face normal -> a 0..5 face id, packed into the claim cell.
+uint grass_face_index(vec3 n) {
+    if (n.y >  0.5) return 0u; // +y top
+    if (n.y < -0.5) return 1u; // -y bottom
+    if (n.x >  0.5) return 2u; // +x
+    if (n.x < -0.5) return 3u; // -x
+    if (n.z >  0.5) return 4u; // +z
+    return 5u;                 // -z
 }
 
-// Bitmask of THIS block's camera-drawn faces (0 if its cell is stale / never written). drawn =
-// stamp is this frame or last (cyclic age <= 1; 0 = never written, RESERVED).
-uint grass_block_faces(vec3 block_center) {
-    ivec3 cell = grass_mask_cell(block_center);
-    // DOUBLE-BUFFER read: the GS writes A on even frames, B on odd - so read the OTHER one, the
-    // buffer NOT being written this frame. A clean cross-frame read (last frame's completed buffer)
-    // instead of reading the buffer the same pass is atomically writing (that flickered).
-    uint v = ((frameCounter & 1) == 0) ? texelFetch(grass_face_sampler_b, cell, 0).x
-                                       : texelFetch(grass_face_sampler_a, cell, 0).x;
-    uint stamp = v >> 6;
-    if (stamp == 0u || (grass_stamp_now() + 65520u - stamp) % 65520u > 1u) {
-        return 0u;
+// FCFS claim -> the block's winning face id this frame (6 = unclaimed). The first candidate face to
+// reach the cell CAS-claims it (stale -> stamp|me); later faces see the claim and read the winner.
+// The TCS reaches it first (earliest pipeline stage), so it drives which face TESSELLATES; the GS
+// runs the same call but, finding the block already claimed, breaks before any atomic and just reads
+// - a bare imageLoad there. Running the CAS in BOTH stages (not trusting a cross-stage read) makes it
+// robust: a CAS always tests TRUE memory, so even if a coherent imageLoad lagged the TCS write, the
+// CAS still resolves to the real winner. The cutout never grows blades, so its body is stubbed (no
+// image) - it needs neither the image binding nor the extension.
+uint grass_claim(ivec3 cell, uint my_face) {
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+    uint stamp = grass_stamp_now();
+    uint cur = imageLoad(grass_claim_img, cell).x;
+    // Bounded CAS: claim if the cell is stale (a new frame), else read who already claimed it. At
+    // most 6 faces ever contend for a cell, so this settles in ~1-2 iterations; once a block is
+    // claimed this frame the first check breaks before any atomic (so a confirming read is cheap).
+    for (int i = 0; i < 8; ++i) {
+        if ((cur >> 3) == stamp) {
+            break; // already claimed this frame
+        }
+        uint prev = imageAtomicCompSwap(grass_claim_img, cell, cur, (stamp << 3) | my_face);
+        if (prev == cur) {
+            cur = (stamp << 3) | my_face; // we won the claim
+            break;
+        }
+        cur = prev; // retry against the winner's value
     }
-    return v & 0x3Fu;
+    return ((cur >> 3) == stamp) ? (cur & 7u) : 6u; // winner this frame, or 6 = unclaimed
+#else
+    return 6u; // cutout: never claims (no blade growing)
+#endif
 }
 #elif PROCEDURAL_GEOMETRY_MODE >= 3
 // ----- Mode 3 (Mask, shadow pass) -----
 // True if this grass-block face toward `dir` was meshed in the shadow pass (it stamped the air
 // cell it faces). Unlike the deduced neighbour read it isn't blind to fully-enclosed blocks;
-// unlike the camera mask it still can't see the camera's direction culling. See CLAUDE.md.
+// unlike mode 4 (Race) it still can't see the camera's per-section direction culling. See CLAUDE.md.
 bool grass_face_rendered(vec3 block_center, vec3 dir) {
     vec3 vp = scene_to_voxel_space(block_center + dir);
     if (!is_inside_voxel_volume(vp)) {
@@ -121,60 +121,11 @@ bool grass_face_rendered(vec3 block_center, vec3 dir) {
 }
 #endif
 
-#if PROCEDURAL_GEOMETRY_MODE >= 4
-// Mode 4 election. Reads THIS block's per-block face bitmask (grass_block_faces) - every face is
-// UNAMBIGUOUS (each block owns its mask cell; no 6-way air-cell sharing). TOP if its bit is set
-// (preferred grower), else the MOST camera-facing DRAWN side. Most-camera-facing - NOT first in a
-// fixed order - is what keeps the side grower STABLE. A cull-zone block (top culled) is drawn by the
-// camera EVERY frame on its dominant (high-dot) side, but its grazing/marginal sides flicker in and
-// out of the drawn set frame-to-frame (TAA jitters the projection -> Sodium's per-section/back-face
-// cull margin wobbles). Fixed order would pick a flickering marginal side whenever it sorts before
-// the dominant one -> the grower SWAPS sides every few frames (the positional jitter). Picking max
-// dot makes the dominant side - drawn every frame - always win, so marginal flicker can't change the
-// result. Strict > with fixed iteration order breaks the 45-degree corner tie deterministically
-// (first wins), so a static camera never churns and rotation switches once at the symmetric angle.
-// (The "most-camera-facing churns" warning was the AIR-CELL era: its candidate set had fluctuating
-// FALSE POSITIVES; the clean per-block bitmask has none, so the dominant side is rock-stable.)
-// y FAST-PATH first: a top below the camera is always drawn. See CLAUDE.md (VERY IMPORTANT election).
-vec3 grass_grower_dir(vec3 block_center) {
-    // Fast path: top face below the camera -> always camera-drawn -> top, no mask read.
-    if (block_center.y + 0.5 < 0.0) {
-        return vec3(0.0, 1.0, 0.0);
-    }
-    uint faces = grass_block_faces(block_center); // exactly which of THIS block's faces were drawn
-    if ((faces & GRASS_FACE_TOP) != 0u) {
-        return vec3(0.0, 1.0, 0.0); // TOP - preferred grower (a rendered top must win)
-    }
-    // Else the MOST camera-facing drawn side OR BOTTOM (stable against marginal-side flicker; see
-    // above). The bottom (-Y) is a candidate too: an overhanging grass block viewed from below has
-    // its top culled and its bottom drawn, so the bottom is the only face the camera amplifies there.
-    // It only ever enters the drawn set when the block actually overhangs air, so a normal grass
-    // block (enclosed bottom) never elects it.
-    const vec3 dirs[5] = vec3[5](
-        vec3(1.0, 0.0, 0.0), vec3(-1.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, -1.0),
-        vec3(0.0, -1.0, 0.0)
-    );
-    const uint bits[5] = uint[5](GRASS_FACE_PX, GRASS_FACE_NX, GRASS_FACE_PZ, GRASS_FACE_NZ, GRASS_FACE_NY);
-    vec3 best = vec3(0.0, 1.0, 0.0); // nothing drawn -> top (grows nothing; no camera geometry)
-    float best_dot = 0.0;            // best_dot starts at 0 -> only camera-facing faces qualify
-    for (int i = 0; i < 5; ++i) {
-        if ((faces & bits[i]) == 0u) {
-            continue;
-        }
-        float facing = dot(dirs[i], -block_center); // distance cancels (same block) -> ~cos(angle)
-        if (facing > best_dot) {     // strict > -> first in fixed order wins exact ties (45 deg)
-            best_dot = facing;
-            best = dirs[i];
-        }
-    }
-    return best;
-}
-#else
+#if PROCEDURAL_GEOMETRY_MODE <= 3
 // ----- Modes 2 (Deduced) / 3 (Mask) election -----
 // Top face must be this many blocks above the camera before we grow from a side instead of the
 // top (these modes can't see camera-direction culling, so they approximate with height +
-// most-camera-facing). Mode 4 has the real camera mask and uses neither knob.
+// most-camera-facing). Mode 4 (Race) instead lets the first drawn face claim the block.
 #define GRASS_SIDE_GROWER_HEIGHT 1.0
 vec3 grass_grower_dir(vec3 block_center) {
     // 1. top
@@ -211,14 +162,21 @@ vec3 grass_grower_dir(vec3 block_center) {
 
 #endif // COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
 
-// Does THIS face grow the grass? Exactly one face does (the elected one) - no double draw.
-// Mode 1 (Top Only) and the no-Colored-Lights fallback grow on grass-block tops only.
+// Does THIS face grow the grass? Exactly one face of a block does - the elected grower (modes 2/3)
+// or the FCFS claim winner (mode 4) - so there's no double draw. Mode 1 (Top Only) and the
+// no-Colored-Lights fallback grow on grass-block tops only.
 bool grass_is_grower(vec3 block_center, vec3 face_normal) {
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
     if (!is_inside_voxel_volume(scene_to_voxel_space(block_center))) {
         return face_normal.y > 0.9; // outside voxel range: top only
     }
+#if PROCEDURAL_GEOMETRY_MODE >= 4
+    // Mode 4 (Race / FCFS): this face grows iff it wins (TCS claim) / won (GS read) the block's race.
+    uint my_face = grass_face_index(face_normal);
+    return grass_claim(grass_mask_cell(block_center), my_face) == my_face;
+#else
     return dot(face_normal, grass_grower_dir(block_center)) > 0.5;
+#endif
 #else
     return face_normal.y > 0.9; // Top Only (mode 1), or no Colored Lights
 #endif
