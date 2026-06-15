@@ -643,6 +643,8 @@ void main() {
               1.0,
               0.0,
               sss_depth,
+              true,
+              0.0,
 #ifdef CLOUD_SHADOWS
               cloud_shadows,
 #endif

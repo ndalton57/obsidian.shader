@@ -44,6 +44,9 @@ uniform vec4 combined_projection_matrix_inverse_3;
 #define lod_projection_matrix_inverse dhProjectionInverse
 #define lod_previous_projection_matrix dhPreviousProjection
 #define lod_render_distance dhRenderDistance
+// LoD SSRT ray near/far planes (dhVoxyNearPlane/dhVoxyFarPlane).
+#define lod_near dhNearPlane
+#define lod_far dhFarPlane
 #define combined_projection_matrix \
     mat4( \
         combined_projection_matrix_0, \
@@ -117,9 +120,16 @@ mat4 combined_projection_matrix_inverse = mat4(
 #define lod_projection_matrix_inverse vxProjInv
 #define lod_previous_projection_matrix vxProjPrev
 #define lod_render_distance (vxRenderDistance * 16)
+// LoD SSRT ray near/far planes - dhVoxyNearPlane/dhVoxyFarPlane for
+// Voxy (shaders.properties: 16.0 / 48000.0). Constant for Voxy, so use the
+// literals rather than an Iris-bound uniform.
+#define lod_near 16.0
+#define lod_far 48000.0
 #else
 #define combined_near near
 #define combined_far far
+#define lod_near near
+#define lod_far far
 #define combined_projection_matrix gbufferProjection
 #define combined_projection_matrix_inverse gbufferProjectionInverse
 #define combined_depth_tex depthtex1

@@ -8,9 +8,9 @@
 #define MATERIAL_TALL_PLANTS_LOWER 3
 #define MATERIAL_TALL_PLANTS_UPPER 4
 #define MATERIAL_LEAVES 5
-// Shader Grass: grass_block tagged in block.properties so the solid terrain
-// geometry shader can detect grass-block tops. Not used by Tachyon's shading -
-// the GS resets it to 0 on the block's own (passthrough) geometry.
+// Shader Grass: grass_block tagged in block.properties so the solid terrain geometry shader
+// can detect grass-block tops (to grow blades). The cube itself shades with GROUND_SSS, like
+// the dirt around it (see material_from), so its sunlit edges glow via the edge-wrap rim.
 #define MATERIAL_GRASS_BLOCK 81
 // Shader Grass: tall_grass/large_fern, split out of MATERIAL_TALL_PLANTS so the grass
 // shader can detect them colour-independently and lift the grass-block-top blades taller

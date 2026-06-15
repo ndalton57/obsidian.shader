@@ -61,6 +61,38 @@ vec2 blocker_search(vec3 scene_pos, float dither, bool has_sss) {
     return vec2(blocker_depth, sss_depth);
 }
 
+// SSS rim glow: how much sun reaches ONE exposed face of a block - the "light level"
+// the edge-wrap model wraps around the shared edge. Returns shadow visibility * how
+// head-on the sun hits the face (NoL); 0 = dark. CALLER MUST only pass faces the
+// per-block mask says were DRAWN - sampling a buried face is the bias-escape bug. On a
+// drawn (exposed) face the sample sits on a real surface, so the bias can't escape.
+float face_sun_light(vec3 scene_pos, vec3 normal, float skylight) {
+    float NoL = dot(normal, light_dir);
+    if (NoL < 1e-3) {
+        return 0.0; // face turned away from the sun
+    }
+    vec3 biased = scene_pos + get_shadow_bias(scene_pos, normal, NoL, skylight);
+    vec3 clip = project_ortho(shadowProjection, transform(shadowModelView, biased));
+    vec3 scr = distort_shadow_space(clip) * 0.5 + 0.5;
+    if (clamp01(scr.xy) != scr.xy) {
+        return NoL; // outside the shadow map -> assume lit
+    }
+    // PCF the read over a TIGHT, fixed WORLD patch (offset in clip, distort each tap, like
+    // shadow_pcf). A single tap swims as the shadow map's grid re-centres on the moving player;
+    // averaging a world-fixed patch holds it steady. Kept to ~one block-texel so it (a) stays on
+    // the sampled face instead of bleeding past the edge into open air, and (b) reads the precise
+    // texel the caller asked for rather than a wide average. 16 Vogel taps for even coverage.
+    float radius = (1.0 / 16.0) * shadowProjection[0].x; // ~1 block-texel, stays on the face
+    const int taps = 16;
+    float vis = 0.0;
+    for (int i = 0; i < taps; ++i) {
+        vec2 offset = vogel_disc_sample(i, taps, 0.0) * radius;
+        vec3 c = vec3(clip.xy + offset, clip.z);
+        vis += texture(shadowtex1, distort_shadow_space(c) * 0.5 + 0.5);
+    }
+    return (vis * (1.0 / float(taps))) * NoL;
+}
+
 vec3 shadow_basic(vec3 shadow_screen_pos) {
     float shadow = texture(shadowtex1, shadow_screen_pos);
 
@@ -229,17 +261,23 @@ vec3 get_filtered_shadows(
     float dither = texelFetch(noisetex, ivec2(gl_FragCoord.xy) & 511, 0).b;
     dither = r1(frameCounter, dither);
 
+    // Soft sun terminator: as a face tips past the sun, fade the sunlight smoothly over
+    // this NoL range instead of cutting the whole face to black in one step (the snap as
+    // the sun's azimuth crosses the noon zenith). Applied to every lit return below.
+    float terminator
+        = smoothstep(-SUN_TERMINATOR_SOFTNESS, 0.5 * SUN_TERMINATOR_SOFTNESS, NoL);
+
 #ifdef SHADOW_VPS
     vec2 blocker_search_result
         = blocker_search(scene_pos, dither, sss_amount > eps);
 
     sss_depth = blocker_search_result.y;
 
-    if (NoL < 1e-3) {
-        return vec3(0.0); // now we can exit early for SSS blocks
+    if (NoL < -SUN_TERMINATOR_SOFTNESS) {
+        return vec3(0.0); // fully past the terminator (sss_depth already measured)
     }
     if (blocker_search_result.x < eps) {
-        return vec3(1.0); // blocker search empty handed => no occluders
+        return vec3(terminator); // no occluders => lit, faded across the terminator
     }
 
     float penumbra_size = 16.0 * SHADOW_PENUMBRA_SCALE
@@ -285,7 +323,7 @@ vec3 get_filtered_shadows(
     vec3 shadow = shadow_basic(shadow_screen_pos);
 #endif
 
-    return shadow;
+    return shadow * terminator;
 }
 #endif
 

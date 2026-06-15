@@ -1,4 +1,5 @@
-CLAUDE.md
+*.md
+!README.md
 
 # Local deploy script + its build artifact (not part of the shaderpack)
 *.bat

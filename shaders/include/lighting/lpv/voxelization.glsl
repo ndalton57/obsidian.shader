@@ -44,6 +44,19 @@ bool is_inside_voxel_volume(vec3 voxel_pos) {
     return clamp01(voxel_pos) == voxel_pos;
 }
 
+// SSS leak fix: map an axis-aligned face normal to its existence bit in a per-block
+// face mask. Shared by the shadow-pass stamp (update_sss_faces) and the deferred read.
+//   +x=bit0  -x=bit1  +y=bit2  -y=bit3  +z=bit4  -z=bit5
+uint sss_face_bit(vec3 normal) {
+    vec3 n = round(normal);
+    if (n.x >  0.5) return 1u << 0u;
+    if (n.x < -0.5) return 1u << 1u;
+    if (n.y >  0.5) return 1u << 2u;
+    if (n.y < -0.5) return 1u << 3u;
+    if (n.z >  0.5) return 1u << 4u;
+    return 1u << 5u;
+}
+
 // Shader Grass: ahead-centred cell for the per-block TOP tint buffer. Mirrors scene_to_voxel_space
 // but uses GRASS_TINT_SIZE, so the tint buffer is DECOUPLED from the LPV's VOXEL_VOLUME_SIZE (the
 // colored-lights resolution doesn't size it). At the default VOXEL_VOLUME_SIZE the two coincide. Used
@@ -232,6 +245,54 @@ void update_grass_tint(uint block_id) {
     vec2 tile_offset = min(gl_MultiTexCoord0.xy, mc_midTexCoord - uv_minus_mid);
     vec2 tile_scale = abs(uv_minus_mid) * 2.0;
     imageStore(grass_tile_img, ivec2(0), vec4(tile_offset, tile_scale));
+}
+
+// SSS leak fix: record which faces of each OPAQUE terrain block were actually DRAWN in
+// the shadow pass, as a per-block 6-bit mask stamped INWARD into the block's own cell.
+// The deferred pass reads a block's own sun-side bit to tell an EXPOSED sun-side face
+// from a BURIED (culled) one - a culled face is never drawn, so its bit is never set,
+// at any distance, with no depth math and no shared-cell false positives. Uses
+// imageAtomicOr because a block's six faces write different bits into one cell.
+// Transparent blocks don't cover a neighbour from the sun, so they don't stamp.
+void update_sss_faces(uint block_id) {
+    // Only OPAQUE occluders stamp - blocks that can actually put a solid block between
+    // a neighbour and the sun. Transparent AND cutout/thin blocks (plants, leaves) never
+    // occlude, so they are skipped: the deferred gate then sees a non-stamping block as
+    // "thin" and checks the neighbour toward the sun instead of its own face.
+    bool is_non_occluder = block_id == 1u || block_id == 18u || block_id == 28u
+        || block_id == 30u || block_id == 80u   // water / transparent objects / misc
+        || block_id == 2u || block_id == 85u || block_id == 82u || block_id == 83u // small/tall grass, plants
+        || block_id == 3u || block_id == 4u      // tall plants (lower/upper)
+        || block_id == 5u;                       // leaves
+
+    if (is_non_occluder) {
+        return;
+    }
+
+    vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
+    vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
+    vec3 scene_pos = transform(shadowModelViewInverse, view_pos);
+
+    ivec3 cell = ivec3(scene_to_voxel_space(scene_pos)); // the face's OWN block cell
+
+    // Snow LAYER (84): its flat bottom culls the covered block's top face, so that block
+    // never stamps its own +y bit and the deferred edge-wrap rim has no sunlit top to wrap
+    // from - the block under the snow (a snow_block on a mountain) stops glowing. Treat the
+    // slab like glass for SSS: stamp the +y bit DOWNWARD into the covered block so its top
+    // counts as exposed. The rim there stays sun- and skylight-gated in the deferred pass, so
+    // no cave leak; paired with the snow discard in shadow.fsh so the sun reaches that top.
+    if (block_id == 84u) {
+        ivec3 below = cell - ivec3(0, 1, 0);
+        if (is_inside_voxel_volume(vec3(below))) {
+            imageAtomicOr(sss_face_img, below, sss_face_bit(vec3(0.0, 1.0, 0.0)));
+        }
+    }
+
+    if (is_inside_voxel_volume(vec3(cell))) {
+        // Stamp INWARD: set this face's bit in its own block, so the deferred pass
+        // reads the block's own sun-side bit - no shared air cell, no false positives.
+        imageAtomicOr(sss_face_img, cell, sss_face_bit(gl_Normal));
+    }
 }
 
 // Shader Grass: record which faces of a grass block the shadow pass meshes, so the

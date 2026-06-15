@@ -58,6 +58,8 @@ in GrassVertex {
     float vanilla_ao;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
     flat vec3 block_center; // solid-only: needed for the grower-face election
+#else
+    vec3 rest_scene_pos; // cutout-only: un-waved position for a sway-proof grass-block lookup
 #endif
 #ifdef POM
     vec2 atlas_tile_coord;
@@ -103,10 +105,10 @@ uniform float frameTimeCounter;
 uniform vec2 taa_offset;
 
 // ------------
-//   Voxel lookup (Eclipse-style short_grass detection)
+//   Voxel lookup (short_grass detection)
 // ------------
 
-// Read Photon's world voxel buffer to find where vanilla short_grass sits, so we
+// Read the world voxel buffer to find where vanilla short_grass sits, so we
 // can grow taller/bushier grass there (SHORT_GRASS_HEIGHT bushiness boost).
 // Only available with Colored Lights on (that's what builds the voxel volume);
 // degrades gracefully to uniform grass otherwise.
@@ -303,10 +305,11 @@ void emit_passthrough(bool grower) {
         v_out.tint = v_in[i].tint;
         v_out.material_mask = v_in[i].material_mask;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-        // The grass_block tag exists only so we can find the block in this GS; shade
-        // the block's own geometry as default terrain (matches stock Tachyon).
+        // The grass_block tag exists only so we can find the block in this GS; shade the
+        // block's own cube as GROUND (mask 6) so it gets GROUND_SSS through the edge-wrap rim,
+        // glowing at sunlit edges like the dirt around it (was 0 = no SSS).
         if (v_out.material_mask == uint(MATERIAL_GRASS_BLOCK)) {
-            v_out.material_mask = 0u;
+            v_out.material_mask = 6u;
         }
 #endif
         v_out.tbn = v_in[i].tbn;
@@ -330,17 +333,17 @@ void emit_passthrough(bool grower) {
 
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
         // GRASS-OVERLAY Z-FIGHT FIX. A grass-block SIDE is two coincident quads: this
-        // tessellated brown dirt base and the FLAT green fringe overlay (cutout program).
+        // tessellated brown dirt base and the FLAT green grass overlay (cutout program).
         // Tessellation jitters this quad's depth so it z-fights the overlay and eats the
-        // green; push this face's depth toward the far plane so the overlay wins - but
-        // only over the top fringe where the overlay is, fading to 0 by 0.5 below the top
-        // so the deferred AO sees no depth STEP on the dirt. See CLAUDE.md gotcha #12.
+        // green; push the brown base toward the far plane so the overlay wins. Applied over
+        // the whole side - resource packs may run the grass overlay the full height of the
+        // block, not just a top fringe - and the green overlay quad is left at its true depth
+        // (so the depth buffer the deferred AO reads is the unbiased overlay). See CLAUDE.md
+        // gotcha #12.
         vec3 ft = v_in[i].tint.rgb;
         bool greenish = ft.g > ft.r + 0.04 && ft.g > ft.b + 0.04;
-        float below_top = (v_in[i].block_center.y + 0.5) - v_in[i].scene_pos.y;
-        float bias_fade = 1.0 - smoothstep(0.3, 0.5, below_top);
         if (grower && abs(v_in[i].tbn[2].y) < 0.5 && !greenish) {
-            gl_Position.z += GRASS_OVERLAY_DEPTH_BIAS * gl_Position.w * bias_fade;
+            gl_Position.z += GRASS_OVERLAY_DEPTH_BIAS * gl_Position.w;
         }
 #endif
         EmitVertex();
@@ -476,10 +479,16 @@ void main() {
         || v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_UPPER)) {
         float h = 1.0;
 #ifdef COLORED_LIGHTS
+        // Look up the grass block on the UN-WAVED position (rest_scene_pos), not the
+        // wind-blown vertices - otherwise a gust pushes the lookup into a neighbouring
+        // cell, the grass-block check fails, and the flat cross flashes back in.
+        vec3 q0 = v_in[0].rest_scene_pos;
+        vec3 q1 = v_in[1].rest_scene_pos;
+        vec3 q2 = v_in[2].rest_scene_pos;
         vec3 base = vec3(
-            (p0.x + p1.x + p2.x) * (1.0 / 3.0),
-            min(p0.y, min(p1.y, p2.y)),
-            (p0.z + p1.z + p2.z) * (1.0 / 3.0)
+            (q0.x + q1.x + q2.x) * (1.0 / 3.0),
+            min(q0.y, min(q1.y, q2.y)),
+            (q0.z + q1.z + q2.z) * (1.0 / 3.0)
         );
         // Grass block below the plant: lower half ~0.4 below its base, upper half ~1.4.
         float below = v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_UPPER) ? 1.4 : 0.4;
@@ -501,10 +510,15 @@ void main() {
     if (make_grass) {
         float h = 1.0; // distance shrink (1 = full); only short_grass ON a grass block shrinks
 #ifdef COLORED_LIGHTS
+        // Un-waved lookup (see the tall-grass block above): keeps the grass-block test
+        // stable while the plant sways, so short grass doesn't flicker back in either.
+        vec3 q0 = v_in[0].rest_scene_pos;
+        vec3 q1 = v_in[1].rest_scene_pos;
+        vec3 q2 = v_in[2].rest_scene_pos;
         vec3 base = vec3(
-            (p0.x + p1.x + p2.x) * (1.0 / 3.0),
-            min(p0.y, min(p1.y, p2.y)),
-            (p0.z + p1.z + p2.z) * (1.0 / 3.0)
+            (q0.x + q1.x + q2.x) * (1.0 / 3.0),
+            min(q0.y, min(q1.y, q2.y)),
+            (q0.z + q1.z + q2.z) * (1.0 / 3.0)
         );
         if (grass_read_voxel(base - vec3(0.0, 0.4, 0.0))
             == uint(MATERIAL_GRASS_BLOCK)) {
@@ -707,7 +721,6 @@ void main() {
     // range test is 3D, so moving toward/away from a grassy ledge (even flying
     // straight up toward one) snaps a whole patch across the boundary. Height
     // reaches 0 by GRASS_RANGE, where detection culls anyway, so no visible step.
-    // (Eclipse has this same bug - identical hard cutoff with no fade.)
     height *= 1.0 - smoothstep(GRASS_RANGE * 0.8, GRASS_RANGE, length(clump));
 
     // Player-proximity outward bend: grass within ~1 block of the camera xz

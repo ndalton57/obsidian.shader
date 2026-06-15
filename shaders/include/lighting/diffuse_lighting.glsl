@@ -70,7 +70,19 @@ float get_blocklight_falloff(float blocklight, float skylight, float ao) {
 
 float get_skylight_falloff(float skylight) {
 #if defined WORLD_OVERWORLD
-    return sqr(skylight);
+    float gentle = sqr(skylight);
+    // Steeper falloff: ambient drops hard below full-sky exposure, so shadowed
+    // and occluded areas go much darker while open full-sky stays the same (both
+    // curves = 1 at skylight 1.0; steep is ~1/3 at 0.5). SHADOW_DARKNESS dials
+    // gentle -> steep, deepening near AND far shadows together.
+    float steep_low = (2.0 * pow(skylight, 15.0) + gentle) * (1.0 / 3.0);
+    float steep = mix(steep_low, gentle, smoothstep(0.5, 0.9, skylight));
+    // SHADOW_DARKNESS spans two halves so the slider reaches past the old maximum:
+    //   0.0 -> gentle, 0.5 -> steep, 1.0 -> steep^2 (deepest). Full-sky (skylight 1)
+    //   stays 1.0 throughout, so only partly-occluded ambient deepens.
+    float d = 2.0 * SHADOW_DARKNESS;
+    float falloff = mix(gentle, steep, min(d, 1.0));
+    return mix(falloff, steep * steep, clamp01(d - 1.0));
 #else
     return 1.0;
 #endif
@@ -159,13 +171,19 @@ vec3 get_block_lighting(
     return lighting;
 }
 
+// sss_transmission_sky is defined further down (after sss_transmission_sun);
+// forward-declared so get_sky_lighting's LoD ambient branch can call it.
+vec3 sss_transmission_sky(vec3 albedo, float sky_sss, float sss_amount);
+
 vec3 get_sky_lighting(
     Material material,
     vec3 bent_normal,
     vec2 light_levels,
     float ao,
     float ambient_sss,
-    float directional_lighting
+    float directional_lighting,
+    bool is_near_field,
+    float distant_fade
 ) {
     vec3 lighting = vec3(0.0f);
 
@@ -187,9 +205,18 @@ vec3 get_sky_lighting(
     vec3 skylight_up = skylight;
 #endif
 
-    // Skylight SSS
-    skylight = mix(skylight, 0.5 * skylight_up * ao, material.sss_amount);
-    skylight += ambient_sss * skylight_up * material.sss_amount * 2.0;
+    // Skylight SSS - HARD fork. Near-field terrain uses the shadow-map ambient SSS;
+    // far-field terrain uses the screenspace transmission model, so the far-field
+    // path carries ZERO shadow-map SSS.
+    if (is_near_field) {
+        skylight = mix(skylight, 0.5 * skylight_up * ao, material.sss_amount);
+        skylight += ambient_sss * skylight_up * material.sss_amount * 2.0;
+    } else {
+        float sky_sss = clamp01(ambient_sss + 0.5 * sqr(light_levels.y));
+        skylight += sss_transmission_sky(
+                        material.albedo, sky_sss, material.sss_amount)
+            * skylight_up * (AMBIENT_SSS_BRIGHTNESS * light_levels.y);
+    }
 
 #if defined WORLD_NETHER
     // Brighten + desaturate nether ambient
@@ -197,9 +224,91 @@ vec3 get_sky_lighting(
         * mix(skylight, vec3(dot(skylight, luminance_weights_rec2020)), 0.5);
 #endif
 
+#if defined WORLD_OVERWORLD && defined PROGRAM_DEFERRED4 && defined SH_SKYLIGHT
+    // Distant ambient dimming - far-field terrain ONLY. Shaded faces out there are
+    // lit by ambient alone, so lowering it deepens the lit-vs-shadow contrast of
+    // distant mountains. Gated on is_near_field (NOT distance) so near-field terrain
+    // is never touched, even at the far edge of the map.
+    float distant_ambient
+        = is_near_field ? 1.0 : mix(1.0, DISTANT_AMBIENT_I, distant_fade);
+    lighting
+        += skylight * get_skylight_falloff(light_levels.y) * distant_ambient;
+#else
     lighting += skylight * get_skylight_falloff(light_levels.y);
+#endif
 
     return lighting;
+}
+
+// Sharp forward-scattering peak when looking towards the light
+float sss_forward_phase(float light_pos) {
+    float phase_curve = 1.0 - light_pos;
+    float phase = exp2(sqrt(phase_curve) * -25.0);
+    return phase + exp(phase_curve * -10.0) * 0.5;
+}
+
+// Far-field sunlight transmission. Keyed to the SSRT-measured light path
+// (sss_depth): full strength where it enters at the sunlit surface, dying within
+// a fraction of a block, so a shadowed face shows a bright band along its sunlit
+// edge rather than a whole-face glow. The short screen-space ray (ss_occlusion)
+// sharpens that band per-pixel: the deeper a point sits behind its own
+// silhouette, the more the transmission is crushed. sss_amount sets the
+// penetration depth only. Near-field terrain uses sss_approx (the near-field
+// model) instead - see get_diffuse_lighting's hard fork.
+vec3 sss_transmission_sun(
+    vec3 albedo,
+    float sss_depth,
+    float sss_amount,
+    float light_pos,
+    float ss_occlusion,
+    float distant_sss
+) {
+    if (sss_amount < 0.01) {
+        return vec3(0.0);
+    }
+
+    float scattering = sss_depth * SSS_DENSITY;
+    float density = 1e-6 + sss_amount * 1.5;
+
+    float scatter_depth = max0(1.0 - scattering / density);
+    scatter_depth *= exp(-7.0 * (1.0 - scatter_depth));
+
+    // Crush the transmission where the screen-space ray towards the light is
+    // buried in geometry. Near the lit edge (ray escapes, low occlusion) the
+    // measured path and the ray share authority, keeping the band bright - but
+    // a DEEPLY buried ray always wins, so a thick occluder the ray can see but
+    // the depth path under-measured can't glow through.
+    float ss_shadows = exp(-7.0 * ss_occlusion) * 0.7;
+    scatter_depth *= mix(
+        ss_shadows,
+        1.0,
+        (1.0 - clamp01(ss_occlusion)) * 0.5 * scatter_depth * distant_sss
+    );
+
+    // Light that travels deeper takes on the material's colour, shifted warm
+    vec3 absorbed = exp(
+        max0(dot(albedo, luminance_weights) - albedo * vec3(1.0, 1.1, 1.2))
+        * (-20.0 * SSS_ABSORBANCE)
+    );
+    vec3 scatter = scatter_depth * mix(absorbed, vec3(1.0), scatter_depth);
+
+    return scatter * (1.0 + 20.0 * sss_forward_phase(light_pos));
+}
+
+// Far-field ambient SSS: skylight scattered through thin materials, a soft glow
+// strongest where geometry stands open to the sky. Near-field terrain uses
+// the shadow-map ambient SSS in get_sky_lighting instead.
+vec3 sss_transmission_sky(vec3 albedo, float sky_sss, float sss_amount) {
+    float scatter_depth = pow(sky_sss, 3.5);
+    scatter_depth = 1.0 - pow4(1.0 - scatter_depth) * (1.0 - scatter_depth);
+
+    vec3 absorbed = exp(
+        max0(dot(albedo, luminance_weights) - albedo * vec3(1.0, 1.1, 1.2))
+        * (-20.0 * SSS_ABSORBANCE)
+    );
+
+    return (scatter_depth * sss_amount)
+        * mix(absorbed, vec3(1.0), scatter_depth);
 }
 
 vec3 get_diffuse_lighting(
@@ -213,10 +322,12 @@ vec3 get_diffuse_lighting(
     float ao,
     float ambient_sss,
     float sss_depth,
+    bool is_near_field,
+    float sss_screen_occlusion,
 #ifdef CLOUD_SHADOWS
     float cloud_shadows,
 #endif
-    float shadow_distance_fade,
+    float sss_distance_fade, // view-distance SSS trust fade (0 near, 1 far)
 #ifdef PHOTONICS_DIFFUSE
     bool is_lod,
 #endif
@@ -237,8 +348,16 @@ vec3 get_diffuse_lighting(
 
     // Arbitrary directional shading to make faces easier to distinguish
     float directional_lighting
-        = (0.9 + 0.1 * normal.x) * (0.8 + 0.2 * abs(flat_normal.y))
-        + 2.0 * ambient_sss * material.sss_amount;
+        = (0.9 + 0.1 * normal.x) * (0.8 + 0.2 * abs(flat_normal.y));
+    // Near-field ambient-SSS boost: near-field terrain ONLY. Far-field runs the
+    // screenspace SSS model and must carry no near-field SSS.
+    if (is_near_field) {
+        // Sky-access gated, like the rim and the sun SSS: a block the sky can't reach gets no
+        // ambient-SSS boost, so SSS can't amplify its glow underground (deep caverns). Without
+        // this, the boost rides into BOTH the skylight and the block-light terms below.
+        directional_lighting += 2.0 * ambient_sss * material.sss_amount
+            * linear_step(0.1, 0.2, light_levels.y); // HARD floor: 0 below skylight 0.1
+    }
 
     // Negative SSS depth => SSS blocked by occluder (SSRT SSS)
     bool sss_blocked = sss_depth < 0.0 || light_levels.y < 0.1;
@@ -249,9 +368,11 @@ vec3 get_diffuse_lighting(
     // Sunlight/moonlight
 
 #if defined SHADOW || defined SHADOW_SSRT
+    // The SSS diffuse-reduction (1 - 0.5*sss_amount) is the near-field model -
+    // near-field terrain only; far-field keeps full diffuse (float(...) = 0).
     vec3 diffuse = vec3(
         lift(max0(NoL), 0.25 * rcp(SHADING_STRENGTH))
-        * (1.0 - 0.5 * material.sss_amount)
+        * (1.0 - 0.5 * material.sss_amount * float(is_near_field))
     );
 
 // Disable bounced lighting with Photonics
@@ -267,34 +388,53 @@ vec3 get_diffuse_lighting(
             * pow1d5(ao + eps) * pow4(light_levels.y) * BOUNCED_LIGHT_I;
     }
 
-    vec3 sss = sss_approx(
-                   material.albedo,
-                   material.sss_amount,
-                   material.sheen_amount,
-                   mix(sss_depth, 0.0, shadow_distance_fade),
-                   LoV,
-                   shadows.x
-               )
-        * float(!sss_blocked);
-
-    // Adjust SSS outside of shadow distance
-    sss *= mix(
-        1.0,
-        (ao + pi * ambient_sss) * (clamp01(NoL) * 0.8 + 0.2),
-        clamp01(shadow_distance_fade)
-    );
-
 #ifdef AO_IN_SUNLIGHT
     diffuse *= sqr(ao);
 #endif
 
+    // ONE model per call: this evaluates either the near-field (shadow-map) OR the far-field
+    // (screenspace) SSS, selected by is_near_field - a single call is never itself a
+    // blend. d4 calls get_diffuse_lighting once per pixel with the dither-PICKED model
+    // and TAA blends the near<->far transition (the MID field). See d4 "TERRAIN LIGHTING".
+    if (is_near_field) {
+        // Near-field SSS (shadow-map). Real measured light path.
+        vec3 sss = sss_approx(
+                       material.albedo,
+                       material.sss_amount,
+                       material.sheen_amount,
+                       sss_depth,
+                       LoV,
+                       shadows.x
+                   )
+            * float(!sss_blocked);
+
 #ifdef SHADOW_VPS
-    // Add SSS and diffuse
-    lighting += diffuse * shadows + bounced + sss;
+        lighting += diffuse * shadows + bounced + sss;
 #else
-    // Blend SSS and diffuse
-    lighting += mix(diffuse, sss, material.sss_amount) * shadows + bounced;
+        lighting += mix(diffuse, sss, material.sss_amount) * shadows + bounced;
 #endif
+    } else {
+        // Far-field SSS (screenspace). sss_depth is the SSRT measurement (never the
+        // shadow-map probe); the screen-space occlusion ray shapes it per-pixel so
+        // the transmission band hugs sun-grazed edges and is crushed on buried
+        // faces. Gated only by the leak check - no view-dependent term, so the
+        // far-field transmission reads the same from any camera angle.
+        float sss_distance_trust = 1.0 - clamp01(sss_distance_fade);
+        vec3 sss = sss_transmission_sun(
+                       material.albedo,
+                       sss_depth,
+                       material.sss_amount,
+                       clamp01(-LoV),
+                       sss_screen_occlusion,
+                       sss_distance_trust
+                   )
+            * float(!sss_blocked);
+
+        // Transmission shows exactly where direct light doesn't reach: the two
+        // crossfade so a face is never lit by both at once
+        vec3 sunlit = diffuse * shadows;
+        lighting += sunlit + sss * clamp01(1.0 - sunlit) + bounced;
+    }
 #else
     // Simple shading for when shadows are disabled
     vec3 sss = 0.08 * sss_scale * pi
@@ -329,7 +469,9 @@ vec3 get_diffuse_lighting(
             light_levels,
             ao,
             ambient_sss,
-            directional_lighting
+            directional_lighting,
+            is_near_field,
+            clamp01(sss_distance_fade)
         );
     } else {
 // When combined gi is enabled
@@ -346,7 +488,9 @@ vec3 get_diffuse_lighting(
         light_levels,
         ao,
         ambient_sss,
-        directional_lighting
+        directional_lighting,
+        is_near_field,
+        clamp01(sss_distance_fade)
     );
 #endif
 

@@ -245,6 +245,8 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
         1.0, // AO
         0.0, // Ambient SSS
         sss_depth,
+        false, // is_near_field: Voxy LoD is never near-field (not in the shadow map)
+        0.0,   // sss_screen_occlusion (translucent, not computed)
 #ifdef CLOUD_SHADOWS
         cloud_shadows,
 #endif

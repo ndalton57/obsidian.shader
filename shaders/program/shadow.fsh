@@ -150,6 +150,13 @@ float get_water_caustics() {
 }
 
 void main() {
+    // MATERIAL_SNOW layer (block.10084): discard so it writes no shadow depth and stops
+    // shadowing the block beneath it. Paired with the downward +y stamp in update_sss_faces
+    // (voxelization.glsl): that stamp re-exposes the covered block's top face to the edge-wrap
+    // rim, and this discard lets the sun actually reach it - together the block under a snow
+    // layer glows as if the snow were glass. The layer still renders with its own SSS in the
+    // gbuffer pass, and voxelization runs in shadow.vsh (untouched by this discard).
+    if (material_mask == 84u) discard; // MATERIAL_SNOW
 #ifndef COLORWHEEL
     if (material_mask == 1) { // Water
 #if defined PROGRAM_SHADOW_WATER || defined PROGRAM_SHADOW_FALLBACK

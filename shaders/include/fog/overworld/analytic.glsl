@@ -245,9 +245,16 @@ mat2x3 air_haze_analytic(
     float scatter_amount = 1.0;
     float anisotropy = 1.0;
 
-    // Haze uses the natural sky ambient (blue day / golden sunset / dim night).
+    // Haze uses the natural sky ambient (blue day / golden sunset / night sky),
+    // but its brightness is floored so the haze never fades out at night while
+    // still tracking the sky's COLOUR. By day the sky ambient sits above the
+    // floor, so this is a no-op and the daytime haze is unchanged; at night the
+    // dim ambient is scaled up to the floor with its hue intact.
+    float amb_lum = dot(ambient_color, vec3(0.2126, 0.7152, 0.0722));
+    vec3 haze_ambient = ambient_color
+        * (max(amb_lum, ATMOSPHERIC_HAZE_NIGHT_FLOOR) / max(amb_lum, eps));
     scattering += 2.0 * (rayleigh_scattering + mie_scattering) * isotropic_phase
-        * ambient_color;
+        * haze_ambient;
 
     for (int i = 0; i < 4; ++i) {
         float mie_phase = 0.7 * henyey_greenstein_phase(LoV, 0.5 * anisotropy)

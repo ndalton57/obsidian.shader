@@ -39,6 +39,11 @@ out GrassVertex {
     // submitted face of a grass block (not just the top, which Sodium culls when
     // viewed from below) and plant the blades on the block top regardless.
     flat vec3 block_center;
+#else
+    // Shader Grass (cutout): the UN-WAVED scene position of this vertex. The GS keys
+    // its grass-block lookup on this, so wind sway can't move the lookup into a
+    // neighbouring cell and flash the vanilla tall-grass cross back into view.
+    vec3 rest_scene_pos;
 #endif
 #ifdef POM
     vec2 atlas_tile_coord;
@@ -205,6 +210,11 @@ void main() {
 
     vec3 pos = transform(gl_ModelViewMatrix, gl_Vertex.xyz);
     pos = view_to_scene_space(pos);
+#if defined GRASS_GEOMETRY && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+    // Cutout grass: keep the un-waved scene position for the GS's grass-block lookup,
+    // so wind sway doesn't push that lookup into a neighbouring cell (see GrassVertex).
+    rest_scene_pos = pos;
+#endif
     pos = pos + cameraPosition;
     pos = animate_vertex(pos, is_top_vertex, light_levels.y, material_mask);
     pos = pos - cameraPosition;

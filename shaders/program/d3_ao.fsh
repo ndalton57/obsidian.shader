@@ -136,15 +136,58 @@ void main() {
 
 #ifdef NORMAL_MAPPING
     vec3 world_normal = decode_unit_vector(gbuffer_data.xy);
+#else
+    vec3 world_normal = decode_unit_vector(unpack_unorm_2x8(gbuffer_data.z));
+#endif
 
 #ifdef LOD_MOD_ACTIVE
     if (is_lod) {
-        vec4 gbuffer_data_0 = texelFetch(colortex1, view_texel, 0);
-        world_normal = decode_unit_vector(unpack_unorm_2x8(gbuffer_data_0.z));
+        // The LoD gbuffer normal decodes broken (see d4) - rebuild the face
+        // normal from depth taps a couple of pixels apart instead (matching
+        // d4: wide taps suppress per-pixel moire striping, picking the
+        // depth-closer neighbour per axis avoids smearing over silhouettes)
+        const int taps_radius = 2;
+        ivec2 max_texel = ivec2(view_res * taau_render_scale) - 1;
+        ivec2 texel_x0 = clamp(view_texel - ivec2(taps_radius, 0), ivec2(0), max_texel);
+        ivec2 texel_x1 = clamp(view_texel + ivec2(taps_radius, 0), ivec2(0), max_texel);
+        ivec2 texel_y0 = clamp(view_texel - ivec2(0, taps_radius), ivec2(0), max_texel);
+        ivec2 texel_y1 = clamp(view_texel + ivec2(0, taps_radius), ivec2(0), max_texel);
+
+        float depth_x0 = texelFetch(combined_depth_tex, texel_x0, 0).x;
+        float depth_x1 = texelFetch(combined_depth_tex, texel_x1, 0).x;
+        float depth_y0 = texelFetch(combined_depth_tex, texel_y0, 0).x;
+        float depth_y1 = texelFetch(combined_depth_tex, texel_y1, 0).x;
+
+        bool pick_x1 = abs(depth_x1 - depth) < abs(depth_x0 - depth);
+        bool pick_y1 = abs(depth_y1 - depth) < abs(depth_y0 - depth);
+
+        vec2 uv_x = uv
+            + vec2((pick_x1 ? texel_x1 : texel_x0) - view_texel)
+                * view_pixel_size * rcp(taau_render_scale);
+        vec2 uv_y = uv
+            + vec2((pick_y1 ? texel_y1 : texel_y0) - view_texel)
+                * view_pixel_size * rcp(taau_render_scale);
+
+        vec3 position_x = screen_to_view_space(
+            combined_projection_matrix_inverse,
+            vec3(uv_x, pick_x1 ? depth_x1 : depth_x0),
+            true
+        );
+        vec3 position_y = screen_to_view_space(
+            combined_projection_matrix_inverse,
+            vec3(uv_y, pick_y1 ? depth_y1 : depth_y0),
+            true
+        );
+
+        vec3 delta_x = pick_x1 ? position_x - view_pos : view_pos - position_x;
+        vec3 delta_y = pick_y1 ? position_y - view_pos : view_pos - position_y;
+
+        vec3 lod_normal_view = normalize(cross(delta_x, delta_y));
+        lod_normal_view = dot(lod_normal_view, view_pos) > 0.0
+            ? -lod_normal_view
+            : lod_normal_view;
+        world_normal = mat3(gbufferModelViewInverse) * lod_normal_view;
     }
-#endif
-#else
-    vec3 world_normal = decode_unit_vector(unpack_unorm_2x8(gbuffer_data.z));
 #endif
 
     vec3 view_normal = mat3(gbufferModelView) * world_normal;

@@ -24,7 +24,7 @@ const vec2 air_fog_falloff_half_life
 
 // Anchor (floor) for the air fog. With BEDROCK_FOG it is the world's real bedrock
 // level, so the fog sits at the bottom of any world no matter how far it extends
-// below -64. Without it (stock Photon air fog), or when bedrockLevel is unavailable,
+// below -64. Without it (the stock air fog), or when bedrockLevel is unavailable,
 // it is the SEA_LEVEL setting - i.e. stock behaviour is unchanged.
 float air_fog_anchor() {
 #if defined BEDROCK_FOG

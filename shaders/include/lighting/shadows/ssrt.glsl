@@ -127,52 +127,36 @@ float get_screen_space_shadows(
         = normalize(view_light_dir + 0.03 * uniform_sphere_sample(hash));
 
 #ifdef LOD_MOD_ACTIVE
-    // Which depth map to raymarch depends on distance
-    // Closer fragments: use combined depth texture (so MC terrain can cast)
-    // Further fragments: use LoD depth texture (maximise precision)
-
-    bool raymarch_combined_depth = length_squared(position_view)
-        < sqr(far + 64.0); // heuristic of 4 chunks overlap
-    bool hit;
-
-    /*
-    #ifdef MC_GL_KHR_shader_subgroup
-    // Using subgroup ops, we make sure that if any fragments in a warp are
-    raymarching the
-    // combined depth buffer, they all do, to avoid divergent branches.
-    raymarch_combined_depth = subgroupAny(raymarch_combined_depth);
-    #endif
-    */
-
-    if (raymarch_combined_depth) {
-        hit = raymarch_shadow(
-            combined_depth_tex,
-            combined_projection_matrix,
-            combined_projection_matrix_inverse,
-            vec3(position_screen_xy, depth),
-            position_view,
-            ray_dir,
-            has_sss,
-            dither,
-            sss_depth
-        );
-    } else {
-        hit = raymarch_shadow(
-            lod_depth_tex,
-            lod_projection_matrix,
+    // Far-field (Voxy LoD) terrain marches the LoD-only depth buffer at EVERY
+    // far-field distance, so the cast shadow comes from LoD geometry alone.
+    // Marching the combined buffer (near vanilla + LoD) for the nearest strip
+    // would let near vanilla terrain cast onto the LoD - but only within a fixed
+    // CAMERA distance (far+64), so that shadow slides forward with the player and
+    // drops the moment terrain crosses the strip edge, instead of staying put on
+    // the terrain. One buffer at all far-field distances keeps the shadow stable.
+    bool hit = raymarch_shadow(
+        lod_depth_tex,
+        lod_projection_matrix,
+        lod_projection_matrix_inverse,
+        vec3(position_screen_xy, depth_lod),
+        screen_to_view_space(
             lod_projection_matrix_inverse,
             vec3(position_screen_xy, depth_lod),
-            screen_to_view_space(
-                lod_projection_matrix_inverse,
-                vec3(position_screen_xy, depth_lod),
-                true
-            ),
-            ray_dir,
-            has_sss,
-            dither,
-            sss_depth
-        );
-    }
+            true
+        ),
+        ray_dir,
+        has_sss,
+        dither,
+        sss_depth
+    );
+
+    // Thin-surface baseline for the far-field transmission. On thick LoD terrain
+    // the shadow march returns -1 (occluded beyond the surface), which would
+    // suppress the distant glow entirely; the transmission is instead shaped
+    // per-pixel by the screen-space occlusion ray (get_sss_screen_occlusion),
+    // which marches the LoD projection clipped to the LoD near/far planes so it
+    // reads the same at every far-field distance.
+    sss_depth = 0.0;
 #else
     bool hit = raymarch_shadow(
         depthtex1,
@@ -191,6 +175,128 @@ float get_screen_space_shadows(
     // in d4_deferred_shading (see get_lightmap_light_leak_prevention), so it is
     // intentionally not multiplied in here to avoid darkening twice.
     return float(!hit);
+}
+
+// Depth linearisation (swapperlinZ): a screen-space depth in [0,1]
+// mapped to a linear fraction for the given near/far. The marched ray depth and
+// the sampled depth both go through it, so the thickness test is sized the same
+// way at every distance.
+float swapperlinZ(float depth, float near_plane, float far_plane) {
+    return (2.0 * near_plane)
+        / (far_plane + near_plane - depth * (far_plane - near_plane));
+}
+
+// Screen-space occlusion towards the light, for far-field subsurface
+// transmission. The screen-space occlusion march (its SSS half): march a
+// fixed screen-space step from the fragment towards the light against the LoD
+// opaque depth and accumulate the distance-weighted fraction of steps buried
+// behind geometry. The ray clips and linearises with the LoD projection's own
+// planes - dhVoxyNearPlane/dhVoxyFarPlane, exposed as lod_near/lod_far
+// (16 / 48000 for Voxy; dhNearPlane/dhFarPlane for DH) - so the occlusion reads
+// the same at every far-field distance and camera angle. sss_transmission_sun
+// consumes the result to shape the transmission per pixel.
+float get_sss_screen_occlusion(
+    vec2 position_screen_xy,
+    vec3 position_view, // combined projection space
+    float depth // combined depth
+#ifdef LOD_MOD_ACTIVE
+    ,
+    bool is_lod,
+    float depth_lod // LoD depth, for the LoD-space reconstruction
+#endif
+) {
+    const int step_count = 16;
+
+    float dither = texelFetch(noisetex, ivec2(gl_FragCoord.xy) & 511, 0).b;
+    dither = r1(frameCounter, dither);
+
+    // Far-field marches the LoD-only opaque buffer in LoD projection with the
+    // LoD near/far planes; near-field stays in combined space.
+    mat4 proj = combined_projection_matrix;
+    vec3 frag_view = position_view;
+    float frag_z = depth;
+    float near_plane = combined_near;
+    float far_plane = combined_far;
+#ifdef LOD_MOD_ACTIVE
+    if (is_lod) {
+        proj = lod_projection_matrix;
+        frag_view = screen_to_view_space(
+            lod_projection_matrix_inverse,
+            vec3(position_screen_xy, depth_lod),
+            true
+        );
+        frag_z = depth_lod;
+        near_plane = lod_near; // dhVoxyNearPlane (16 for Voxy)
+        far_plane = lod_far;   // dhVoxyFarPlane (48000 for Voxy)
+    }
+#endif
+
+    vec3 position = vec3(position_screen_xy, frag_z);
+
+    // Screen-space occlusion ray: prevent it going behind the camera, then a
+    // fixed-size screen-space step towards the light.
+    float ray_length
+        = ((frag_view.z + view_light_dir.z * far_plane * sqrt(3.0)) > -near_plane)
+        ? (-near_plane - frag_view.z) / view_light_dir.z
+        : far_plane * sqrt(3.0);
+
+    vec3 direction = view_to_screen_space(
+                         proj,
+                         frag_view + view_light_dir * ray_length,
+                         true
+                     )
+        - position;
+    direction /= max(
+        max(abs(direction.x) / 0.0005, abs(direction.y) / 0.0005),
+        400.0
+    );
+    direction *= 6.0;
+
+    vec3 ray_pos = position + direction * dither;
+    ray_pos += direction * 0.3; // shadow bias against self-intersection
+
+    float sss_distance_scale
+        = 1.0 / (1.0 + swapperlinZ(position.z, near_plane, far_plane) * 32.0);
+    float distance_weight = 1.0 + length(frag_view) / 150.0;
+
+    float occlusion = 0.0;
+
+    for (int i = 0; i < step_count; ++i) {
+        if (clamp01(ray_pos.xy) != ray_pos.xy) {
+            break;
+        }
+
+        ivec2 sample_texel
+            = ivec2(ray_pos.xy * view_res * taau_render_scale);
+        float depth_sample;
+#ifdef LOD_MOD_ACTIVE
+        if (is_lod) {
+            depth_sample = texelFetch(lod_depth_tex_solid, sample_texel, 0).x;
+        } else
+#endif
+        {
+            depth_sample = texelFetch(combined_depth_tex, sample_texel, 0).x;
+        }
+
+        // depth_sample == 0 is an empty LoD texel (sky / no geometry); skip it,
+        // else every empty step would falsely register as an occluder.
+        if (depth_sample != 0.0 && depth_sample < ray_pos.z) {
+            float linear_current
+                = swapperlinZ(ray_pos.z, near_plane, far_plane);
+            float linear_sample
+                = swapperlinZ(depth_sample, near_plane, far_plane);
+            float dist
+                = abs(linear_sample - linear_current) / linear_current;
+
+            if (dist < sss_distance_scale) {
+                occlusion += distance_weight;
+            }
+        }
+
+        ray_pos += direction;
+    }
+
+    return occlusion * rcp(float(step_count));
 }
 
 #endif // INCLUDE_LIGHTING_SHADOWS_SSRT_SHADOWS

@@ -174,6 +174,16 @@ option.SSS_SHEEN                       = SSS Sheen
 option.SSS_SHEEN.comment               = Specular "sheen" effect on plants and leaves, helps tall grass and stuff to blend better with the grass specular
 option.SSS_INTENSITY                   = SSS Intensity
 option.SSS_INTENSITY.comment           = Adjusts the brightness of subsurface scattering (SSS)
+option.GROUND_SSS                      = Ground SSS
+option.GROUND_SSS.comment              = Subsurface back-face glow on solid ground (dirt/snow): the shadowed side glows when the sun hits the front. Keep low - high values bleed light through hills. 0 = off.
+option.SSS_THICKNESS_DEBUG             = Ground SSS Debug
+option.SSS_THICKNESS_DEBUG.comment     = Diagnostic view on dirt/snow: the ground SSS gate. Red = the block's sun-side face is lit (it glows), Green = sun-side shadowed/buried (suppressed). Leave off for normal play.
+option.SSS_DENSITY                     = SSS Density (distant)
+option.SSS_DENSITY.comment             = Density of the screenspace SSS used on distant / Voxy LoD terrain. Higher = light dies off faster inside the material.
+option.SSS_ABSORBANCE                  = SSS Absorbance (distant)
+option.SSS_ABSORBANCE.comment          = How strongly distant / LoD subsurface scattering tints toward the material's own colour.
+option.AMBIENT_SSS_BRIGHTNESS          = Ambient SSS (distant)
+option.AMBIENT_SSS_BRIGHTNESS.comment  = Brightness of skylight subsurface scattering on distant / Voxy LoD terrain.
 option.SHADING_STRENGTH                = Shading Strength
 option.SHADING_STRENGTH.comment        = Adjusts the contrast of direct light shading. Reducing this option makes faces facing away from the sun that aren't in shadow brighter; increasing it makes them darker
 
@@ -233,6 +243,8 @@ option.MOON_B                          = §9▍ §fBlue
 option.MOON_I                          = Moonlight Intensity
 option.SKYLIGHT_I                      = Skylight Intensity
 option.BOUNCED_LIGHT_I                 = Bounced Sunlight Intensity
+option.SHADOW_DARKNESS                 = Shadow Darkness
+option.SHADOW_DARKNESS.comment         = Steepens the skylight ambient that fills shadowed and occluded areas (near and far). Higher = darker shadows. Open full-sky areas are unaffected.
 option.CAVE_LIGHTING_I                 = Cave Brightness
 option.LIGHTNING_FLASH                 = Lightning Flash
 option.NETHER_USE_BIOME_COLOR          = Use Biome Color
@@ -478,6 +490,8 @@ option.BEDROCK_FOG                          = Bedrock Fog
 option.BEDROCK_FOG.comment                  = A self-lit fog that pools in the bottom of any world (caves, low valleys). Its colour and brightness are fixed - it does not change with time of day, weather, or sun, and dissipates upward at a rate scaled to the world's height so it always sits low. Configure it in the Bedrock Fog sub-menu
 option.ATMOSPHERIC_HAZE_DENSITY             = Atmospheric Haze Density
 option.ATMOSPHERIC_HAZE_DENSITY.comment     = A separate aerial-perspective haze on distant terrain that works at ALL altitudes (incl. high mountains). 0.00 = off, and leaves all other fog untouched. Slider is 0.00-1.00; around 0.30-0.60 is usually a nice subtle haze
+option.ATMOSPHERIC_HAZE_NIGHT_FLOOR         = Atmospheric Haze Night Floor
+option.ATMOSPHERIC_HAZE_NIGHT_FLOOR.comment = Keeps the atmospheric haze equally visible at night instead of fading out, by flooring its ambient brightness while keeping the sky's colour. Raise it until the night haze matches daytime; if daytime starts brightening, you've gone above the day-sky level - lower it. 0 = off (fades at night, as before)
 option.BEDROCK_FOG_BRIGHTNESS               = Brightness
 option.BEDROCK_FOG_BRIGHTNESS.comment       = Brightness of the bedrock fog. Tune it until the fog looks right
 option.BEDROCK_FOG_DISSIPATION              = Dissipation

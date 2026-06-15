@@ -66,6 +66,7 @@ uniform float biome_humidity;
 
 #ifdef COLORED_LIGHTS
 writeonly uniform uimage3D voxel_img;
+layout(r32ui) coherent uniform uimage3D sss_face_img; // SSS leak fix: per-face existence bits
 #if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
 // Shader Grass: each rendered grass-block face stamps the air cell it faces here, so
 // the election can confirm a side is really meshed (update_grass_faces).
@@ -99,6 +100,7 @@ void main() {
 
 #if defined COLORED_LIGHTS && !defined PROGRAM_SHADOW_ENTITIES
     update_voxel_map(material_mask);
+    update_sss_faces(material_mask);
     update_grass_tint(material_mask);
 #if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
     update_grass_faces(material_mask);
@@ -125,6 +127,10 @@ void main() {
         clamp01(rcp(240.0) * gl_MultiTexCoord1.y),
         material_mask
     );
+    // Leaves wave here normally: the SSS rim samples the shadow map PER-POINT along each shared
+    // edge (d4), so a waving leaf shadow sweeps across the edge accurately instead of pulsing the
+    // whole edge from one mid sample. The per-point read is the real fix for the old uniform
+    // flicker - no need to freeze leaves, which would also kill this dynamic shadowing.
     pos = pos - cameraPosition;
 
 #ifdef WATER_CAUSTICS

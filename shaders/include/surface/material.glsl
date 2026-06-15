@@ -180,9 +180,12 @@ Material material_from(
                     } else { // 2-4
                         if (material_mask == 2u) { // 2
 #ifdef HARDCODED_SSS
-                            // Small plants
+                            // Small plants - the shader-grass blades are emitted as
+                            // material 2 and dominate this category. NO sheen: it
+                            // over-brightens / bleaches the dense 3D blades. sss_amount
+                            // keeps the soft translucency. (Leaves and tall plants set
+                            // their own sheen below and are unaffected.)
                             material.sss_amount = 0.5;
-                            material.sheen_amount = 1.0;
 #endif
                         } else { // 3
 #ifdef HARDCODED_SSS
@@ -216,6 +219,13 @@ Material material_from(
                         }
                     } else { // 6-8
                         if (material_mask == 6u) { // 6
+#ifdef HARDCODED_SSS
+                            // Ground (dirt/snow) back-face glow. Kept LOW via
+                            // GROUND_SSS: this reuses the foliage SSS transmission, and high
+                            // values over-brighten into the "light bleeds through
+                            // the hill" look. 0 disables it.
+                            material.sss_amount = GROUND_SSS;
+#endif
                         } else { // 7
 // Sand
 #ifdef HARDCODED_SPECULAR
@@ -299,13 +309,13 @@ Material material_from(
                     } else { // 14-16
                         if (material_mask == 14u) { // 14
 #ifdef HARDCODED_SSS
-                            // Strong SSS
-                            material.sss_amount = 0.6;
+                            // Strong SSS - thin blocks (sugar cane, cobweb, petals)
+                            material.sss_amount = 1.0;
 #endif
                         } else { // 15
 #ifdef HARDCODED_SSS
-                            // Weak SSS
-                            material.sss_amount = 0.1;
+                            // Bleed-light tier (pumpkin, melon, hay, wool, moss, ...)
+                            material.sss_amount = 0.5;
 #endif
                         }
                     }
@@ -835,6 +845,16 @@ Material material_from(
 
 #ifdef HARDCODED_SSS
         material.sss_amount = 0.5;
+#endif
+    }
+
+    if (material_mask == 81u || material_mask == 84u) { // 81 grass block, 84 snow layer
+// Grass block (the dirt cube under the blades) and the thin snow layer get the same ground
+// glow as the dirt/snow_block beside them (GROUND_SSS). Set here rather than in block.properties
+// because both are tagged for the grass geometry shader (10081 / 10084), so neither can sit in
+// 10006. In d4 the grass cube uses the edge-wrap rim; the thin snow slab gets a top-lit glow.
+#ifdef HARDCODED_SSS
+        material.sss_amount = GROUND_SSS;
 #endif
     }
 
