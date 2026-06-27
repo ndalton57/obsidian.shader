@@ -231,8 +231,14 @@ vec3 get_sky_lighting(
     // is never touched, even at the far edge of the map.
     float distant_ambient
         = is_near_field ? 1.0 : mix(1.0, DISTANT_AMBIENT_I, distant_fade);
-    lighting
-        += skylight * get_skylight_falloff(light_levels.y) * distant_ambient;
+    // Night ambient dimming - fades the sky AMBIENT (the shadow fill) darker as the
+    // sun drops below the horizon, deepening night shadows toward NIGHT_AMBIENT_I.
+    // The direct moon term is untouched, so moonlit faces stay bright while shadowed
+    // ones go dark. Daytime (sun above horizon) is a no-op.
+    float night_ambient = mix(
+        1.0, NIGHT_AMBIENT_I, 1.0 - smoothstep(-0.25, 0.0, sun_dir.y));
+    lighting += skylight * get_skylight_falloff(light_levels.y)
+        * distant_ambient * night_ambient;
 #else
     lighting += skylight * get_skylight_falloff(light_levels.y);
 #endif
@@ -494,6 +500,18 @@ vec3 get_diffuse_lighting(
     );
 #endif
 
+    // Far-field light-source boost at night. Distant torches/lanterns (their emission
+    // AND the warm blocklight glow they cast) pump out more light once the sun sets, so
+    // far-off villages read like the reference. FAR-FIELD ONLY - near-field is
+    // byte-identical - and a smooth dusk ramp, so daytime is untouched.
+#if defined PROGRAM_DEFERRED4 && defined WORLD_OVERWORLD
+    float far_night_light = is_near_field
+        ? 1.0
+        : mix(1.0, NIGHT_EMISSION_I, 1.0 - smoothstep(-0.25, 0.0, sun_dir.y));
+#else
+    const float far_night_light = 1.0;
+#endif
+
     // Blocklight
 
 #if defined PHOTONICS_DIFFUSE
@@ -524,10 +542,12 @@ vec3 get_diffuse_lighting(
         light_levels,
         ao,
         directional_lighting
-    );
+    ) * far_night_light;
 #endif
 
-    lighting += material.emission * emission_scale;
+    // Emissive blocks. far_night_light (computed above) boosts far-field light sources
+    // at night; it is 1.0 for near-field and daytime, so this is otherwise unchanged.
+    lighting += material.emission * emission_scale * far_night_light;
 
 #if defined WORLD_OVERWORLD
     // Cave lighting

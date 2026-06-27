@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d4_deferred_shading:
   Shade terrain and entities, draw sky
@@ -77,6 +77,31 @@ uniform sampler2D depthtex1;
 #ifdef COLORED_LIGHTS
 uniform sampler3D light_sampler_a;
 uniform sampler3D light_sampler_b;
+uniform sampler3D sculk_field_sampler; // sculk glow field (d4b_sculk_field)
+
+#if defined WORLD_OVERWORLD && defined COLORED_LIGHTS && defined SCULK_GLOW
+// Toroidal trilinear sample of the sculk glow field. A hardware tap cannot
+// be used: the texture is a 2048-block world torus, and clamp addressing
+// puts a hard seam plane at every 2048-multiple world coordinate plus hard
+// cell edges around every pool — the wrap has to be done by hand.
+float sample_sculk_field(vec3 world_pos) {
+    vec3 p = world_pos * rcp(8.0) - 0.5;
+    ivec3 c = ivec3(floor(p));
+    vec3 f = fract(p);
+
+    #define SCULK_CELL(dx, dy, dz) texelFetch( \
+        sculk_field_sampler, (c + ivec3(dx, dy, dz)) & ivec3(255), 0).x
+
+    float x00 = mix(SCULK_CELL(0, 0, 0), SCULK_CELL(1, 0, 0), f.x);
+    float x10 = mix(SCULK_CELL(0, 1, 0), SCULK_CELL(1, 1, 0), f.x);
+    float x01 = mix(SCULK_CELL(0, 0, 1), SCULK_CELL(1, 0, 1), f.x);
+    float x11 = mix(SCULK_CELL(0, 1, 1), SCULK_CELL(1, 1, 1), f.x);
+
+    #undef SCULK_CELL
+
+    return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
+}
+#endif
 uniform usampler3D sss_face_sampler; // SSS leak fix: per-face existence (shadow pass)
 #endif
 
@@ -250,7 +275,7 @@ void main() {
         /* use_klein_nishina_phase */ depth == 1.0
     );
 
-    // Read clouds/aurora/crepuscular rays
+    // Read clouds/aurora
 
     float clouds_apparent_distance;
     vec4 clouds_and_aurora
@@ -744,6 +769,14 @@ void main() {
                                 * face_sun_light(edge_point - cameraPosition, d, light_levels.y);
                         }
                         rim = clamp01(rim);
+
+                        // A face turned INTO the sun has no light to wrap
+                        // around its edges - every texel on it already sees
+                        // the sun directly, so the wrap fades out as the
+                        // face swings toward the light. Shadow-side and
+                        // grazing faces (NoL <= 0) keep the full rim. Flat
+                        // normal: the rim is a per-face block model.
+                        rim *= 1.0 - clamp01(dot(flat_normal, light_dir));
                     }
 
                     // Sky-access backstop: a block the sky can't reach gets NO sun rim, whatever
@@ -753,6 +786,13 @@ void main() {
                     // free. HARD floor at 0.1 - a sliver of sky (0.0-0.1) must NOT pass a partial
                     // rim, or deep-cavern blocks with a trace of skylight still glow.
                     rim *= linear_step(0.1, 0.2, light_levels.y);
+
+                    // The rim borrows SUN light, so it dims with the same
+                    // cloud-shadow factor as the direct term. face_sun_light
+                    // reads only the geometric shadow map - clouds are not
+                    // in it - so without this the rim stays full-bright
+                    // while the face itself darkens under cloud cover.
+                    rim *= cloud_shadows;
 
                     dbg_sun_occlusion = 1.0 - rim;
                     // Don't touch base lighting: the base model lights each face normally
@@ -925,6 +965,34 @@ void main() {
                     depth,
                     material_mask
                 );
+#endif
+
+        // Sculk ambiance: the teal light sculk casts on its surroundings,
+        // read from the persistent world-anchored glow field (see
+        // d4b_sculk_field.csh). World-locked — camera position and rotation
+        // cannot move it — and driven by the real material mask near AND
+        // far, so it works from the player's feet to the LoD horizon. One
+        // trilinear tap gives a soft 8-16 block pool around each stamped
+        // cell. Sculk surfaces receive it too (excluding them inverts the
+        // contrast: a patch must never read darker than its own pool).
+        //
+        // PURELY ADDITIVE, with no reference to the voxel volume: every
+        // volume-coupled term tried here (membership gates, floodfill
+        // subtraction) painted the volume's moving boundary onto the
+        // terrain as lines, bands, or a camera-following cube. The field
+        // is dim enough that overlapping the real floodfill pools is
+        // imperceptible.
+#if defined WORLD_OVERWORLD && defined COLORED_LIGHTS && defined SCULK_GLOW
+        {
+            const vec3 sculk_light_color = vec3(0.75, 1.00, 0.83);
+            const float sculk_ambiance_intensity
+                = 0.25 * SCULK_GLOW_INTENSITY; // 0.25 = tune HERE
+
+            float sculk_glow = sample_sculk_field(position_world);
+
+            fragment_color += material.albedo * ao * sculk_light_color
+                * (sculk_glow * sculk_ambiance_intensity);
+        }
 #endif
 
         // Apply fog

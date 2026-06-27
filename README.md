@@ -29,6 +29,22 @@
 
 </details>
 
+* <details open>
+  <summary>Nether Overhaul</summary>
+  
+  <img src="docs/images/nether.png" title="Ported from Bliss">
+  
+
+</details>
+
+* <details open>
+  <summary>End Overhaul</summary>
+  
+  <img src="docs/images/end.png" title="Ported from Bliss">
+  
+
+</details>
+
 * More incoming...
 
 ## Credit
@@ -37,6 +53,7 @@ This shader pack is basically just me combining a bunch of my favorite shader fe
 
 - Tachyon is a fork of [Photon](https://github.com/sixthsurge/photon) by [SixthSurge](https://github.com/sixthsurge)
 - Original Shader Grass and GS pipeline implimentation was ported from [Eclipse Shaders](https://github.com/Merlin1809/Eclipse-Shader)
+- Overworld Clouds, Nether Lava Plumes, and End clouds were ported from [Bliss Shaders](https://github.com/X0nk/Bliss-Shader)
 
 ## License
 

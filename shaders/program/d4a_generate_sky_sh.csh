@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d4a_generate_sky_sh.csh:
   Generate skylight SH using parallel reduction

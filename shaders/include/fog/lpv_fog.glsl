@@ -28,6 +28,10 @@ vec2 overworld_fog_density_no_noise(vec3 position_world) {
     // sea level otherwise)
     density *= linear_step(air_fog_volume_bottom(), air_fog_anchor(), position_world.y);
 
+    // bedrock fog displays only while the eye is in the bottom fifth of the
+    // world (no-op for the stock air fog)
+    density *= bedrock_fog_display_factor(eyeAltitude);
+
     return density * (0.5 * OVERWORLD_FOG_INTENSITY);
 }
 #endif
@@ -103,6 +107,13 @@ vec3 get_lpv_fog_scattering(
     vec3 ray_end_world,
     float dither
 ) {
+#if defined WORLD_NETHER && !defined NETHER_HAZE
+    // The Nether Haze toggle owns ALL ambient veil in the nether: with it
+    // off, the LPV glow around emitters (the lava seas light the fog
+    // everywhere) must not survive as a base haze
+    return vec3(0.0);
+#endif
+
     const uint step_count = LPV_VL_STEPS;
     const float step_ratio = 1.1;
 

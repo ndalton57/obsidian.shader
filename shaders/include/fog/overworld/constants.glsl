@@ -62,4 +62,20 @@ vec2 bedrock_fog_half_life() {
     return air_fog_falloff_half_life;
 }
 
+// The bedrock fog only displays while the eye is in the bottom FIFTH of the
+// world, measured off the same real world bounds as the dissipation above
+// (bedrockLevel floor + heightLimit; 384 fallback when unavailable). It
+// fades out across the next 5% of world height, so climbing out of the
+// depths dissolves the fog instead of popping it. The stock air fog
+// (bedrock fog off) is never eye-gated — this is 1.0 there.
+float bedrock_fog_display_factor(float eye_y) {
+#if defined BEDROCK_FOG
+    float world_height = heightLimit > 0 ? float(heightLimit) : 384.0;
+    float gate_y = air_fog_anchor() + 0.20 * world_height;
+    return 1.0 - smoothstep(gate_y, gate_y + 0.05 * world_height, eye_y);
+#else
+    return 1.0;
+#endif
+}
+
 #endif // INCLUDE_FOG_OVERWORLD_CONSTANTS

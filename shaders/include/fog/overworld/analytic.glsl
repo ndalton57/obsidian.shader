@@ -27,7 +27,10 @@ vec2 air_fog_analytic_airmass(
                0.0,
                ray_length
            )
-        * (0.5 * OVERWORLD_FOG_INTENSITY);
+        * (0.5 * OVERWORLD_FOG_INTENSITY)
+        // bedrock fog displays only while the eye is in the bottom fifth
+        // of the world (no-op for the stock air fog)
+        * bedrock_fog_display_factor(eyeAltitude);
 }
 
 mat2x3 air_fog_analytic(
@@ -176,7 +179,8 @@ mat2x3 air_fog_analytic(
 vec2 air_haze_airmass(
     vec3 ray_origin_world,
     vec3 ray_direction_world,
-    float ray_length
+    float ray_length,
+    float night_density_mul
 ) {
     // Large scale heights (blocks): rayleigh persists very high, mie is weak so
     // the haze stays blue. Density is nearly constant from Y -200 up past Y1000.
@@ -200,7 +204,7 @@ vec2 air_haze_airmass(
     // The 0.1 remaps the user slider (now 0.0-1.0) onto the useful old 0.0-0.10
     // range (anything above old 0.10 was way too thick).
     return airmass * vec2(1.0, 0.15)
-        * (haze_base_density * ATMOSPHERIC_HAZE_DENSITY * 0.1);
+        * (haze_base_density * ATMOSPHERIC_HAZE_DENSITY * 0.1 * night_density_mul);
 }
 
 mat2x3 air_haze_analytic(
@@ -208,7 +212,8 @@ mat2x3 air_haze_analytic(
     vec3 ray_end_world,
     bool sky,
     float skylight,
-    float shadow
+    float shadow,
+    float night_density_mul
 ) {
     // Leave the sky to Tachyon's own atmosphere; the haze only tints terrain.
     // Density 0 is a true no-op so it never disturbs the normal fog.
@@ -227,7 +232,8 @@ mat2x3 air_haze_analytic(
     vec2 airmass = air_haze_airmass(
         ray_origin_world,
         ray_direction_world,
-        ray_length
+        ray_length,
+        night_density_mul
     );
     vec3 optical_depth = fog_params.rayleigh_scattering_coeff * airmass.x
         + fog_params.mie_extinction_coeff * airmass.y;

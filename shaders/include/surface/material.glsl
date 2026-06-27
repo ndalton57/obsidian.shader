@@ -4,6 +4,13 @@
 #include "/include/post_processing/aces/matrices.glsl"
 #include "/include/utility/color.glsl"
 
+#if defined FANCY_LAVA && defined PROGRAM_DEFERRED4
+// Generated tileable fBm noise (image/lava_noise.png): the lava pattern
+// needs a tight value distribution (p5-p95 ~ 0.36-0.54); noisetex
+// .r spans ~2.2x wider, which pow5 turns into heavy dark blotches
+uniform sampler2D lava_noisetex;
+#endif
+
 const float air_n = 1.000293; // for 0°C and 1 atm
 const float water_n = 1.333; // for 20°C
 
@@ -155,8 +162,7 @@ Material material_from(
     material.is_hardcoded_metal = false;
 
     // Hardcoded materials for specific blocks
-    // Using binary split search to minimise branches per fragment (TODO:
-    // measure impact)
+    // Using binary split search to minimise branches per fragment
 
     vec3 hsl = rgb_to_hsl(albedo_srgb);
     vec3 albedo_sqrt = sqrt(material.albedo);
@@ -670,7 +676,26 @@ Material material_from(
                     } else { // 46-48
                         if (material_mask == 46u) { // 46
 #ifdef HARDCODED_EMISSION
-                            // Sculk
+                            // Sculk: the bright teal texels glow at full
+                            // strength and the dark teal body carries a soft
+                            // base glow, so patches read across a cavern on
+                            // the surface's own emission — the floodfill
+                            // teal wash only exists inside the voxel volume,
+                            // and the far field is never voxelized at all.
+#ifdef SCULK_GLOW
+                            // mix(body, speckle): speckle radiance stays
+                            // (~3, the bright dots); the body glow is
+                            // scaled to sit just above the cast-light pool
+                            // (d4's sculk ambiance) — the patch must read
+                            // brighter than its own pool, but in the same
+                            // register. Both ride SCULK_GLOW_INTENSITY.
+                            material.emission = material.albedo
+                                * isolate_hue(hsl, 200.0, 40.0)
+                                * mix(0.22 * SCULK_GLOW_INTENSITY, 0.2,
+                                      smoothstep(0.5, 0.7, hsl.z));
+#else
+                            // stock look: only the bright speckle texels
+                            // glow, fading out within 20 blocks
                             material.emission = 0.2 * material.albedo
                                 * isolate_hue(hsl, 200.0, 40.0)
                                 * smoothstep(0.5, 0.7, hsl.z)
@@ -680,6 +705,7 @@ Material material_from(
                                        20.0,
                                        distance(world_pos, cameraPosition)
                                    ));
+#endif
 #endif
                         } else { // 47
 #ifdef HARDCODED_EMISSION
@@ -857,6 +883,93 @@ Material material_from(
         material.sss_amount = GROUND_SSS;
 #endif
     }
+
+#if defined FANCY_LAVA && defined PROGRAM_DEFERRED4
+    if (material_mask == 39u) {
+        // Lava - procedural texture: the vanilla texture's bright texels
+        // pick up a scrolling noise pattern in the lava palette; the dark
+        // crust keeps its look. The pattern is built in gamma space, then
+        // converted to the working space with the brightness scale applied
+        // in linear light.
+        float l_albedo = clamp01(length(albedo_srgb));
+        float lava_emission = sqr(l_albedo) * l_albedo * float(l_albedo > 0.7);
+
+        if (lava_emission > 0.0) {
+            vec2 lava_pos = (world_pos.xz + world_pos.xy + world_pos.zy) * 0.5;
+            lava_pos.x *= 0.5;
+            float lava_noise = clamp01(
+                texture(
+                    lava_noisetex,
+                    (lava_pos
+                     + vec2(-frameTimeCounter * 0.1, frameTimeCounter * 0.05))
+                        * 0.025
+                )
+                    .r
+                + 0.3
+            );
+            // Palette: kept warm — redder bases read too red
+            // through the tonemap
+            vec3 lava_pattern = srgb_eotf_inv(
+                                    normalize(vec3(1.0, 0.45, 0.03))
+                                    * (pow4(lava_noise) * lava_noise)
+                                )
+                * rec709_to_rec2020;
+
+            material.albedo = lava_pattern
+                * (3.0 + (pow4(l_albedo) * l_albedo) * 2.0);
+            material.emission
+                = max(material.emission, material.albedo * lava_emission);
+        }
+    }
+#endif
+
+#if defined GLOWING_ORE && defined PROGRAM_DEFERRED4
+    if (86u <= material_mask && material_mask < 93u) {
+        // Glowing ores: emission = the texel's chroma (max channel
+        // difference), so the colored veins glow while the gray stone
+        // matrix stays dark
+        float ore_chroma = max(
+            max(max(albedo_srgb.r - albedo_srgb.b,
+                    albedo_srgb.r - albedo_srgb.g),
+                max(albedo_srgb.b - albedo_srgb.g,
+                    albedo_srgb.b - albedo_srgb.r)),
+            max(albedo_srgb.g - albedo_srgb.r, albedo_srgb.g - albedo_srgb.b)
+        );
+        float ore_mask = clamp01(ore_chroma);
+
+        if (material_mask == 87u) {
+            // diamond: exclude two blue-gray texture tones that pass the
+            // chroma test but should stay dark
+            ore_mask -= float(
+                all(lessThan(albedo_srgb, vec3(0.56, 0.69, 0.70)))
+                && all(greaterThan(albedo_srgb, vec3(0.54, 0.67, 0.68)))
+            );
+            ore_mask -= float(
+                all(lessThan(albedo_srgb, vec3(0.40, 0.55, 0.56)))
+                && all(greaterThan(albedo_srgb, vec3(0.38, 0.53, 0.54)))
+            );
+        }
+
+        ore_mask = clamp01(ore_mask * float(ore_mask > 0.1) * 16.0);
+        // The 0.1 damping keeps the vein glow subtle — most of the ore's
+        // presence comes from the colored light it pushes into the LPV.
+        // GLOWING_ORE_INTENSITY only dims: 1.0 is the ceiling
+        material.emission = max(
+            material.emission,
+            material.albedo
+                * (ore_mask * clamp01(length(albedo_srgb))
+                   * (0.1 * GLOWING_ORE_INTENSITY))
+        );
+    }
+#endif
+
+#ifndef SSS
+    // Master subsurface-scattering toggle: zeroing the amount here disables
+    // every SSS path at once — near-field sss_approx and the solid-block
+    // edge-wrap rim, the far-field screenspace transmission, and the ground
+    // glow — since they all key off material.sss_amount
+    material.sss_amount = 0.0;
+#endif
 
     return material;
 }

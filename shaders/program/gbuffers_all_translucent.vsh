@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/gbuffers_all_translucent:
   Handle translucent terrain, translucent entities (Iris), translucent handheld

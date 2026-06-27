@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/gbuffers_all_solid:
   Handle terrain, entities, the hand, beacon beams and spider eyes
@@ -221,9 +221,11 @@ void main() {
 
     scene_pos = pos;
 
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+#if defined GRASS_GEOMETRY && defined PROGRAM_GBUFFERS_TERRAIN_SOLID
     // Block center (scene space). Grass blocks don't wave, so scene_pos is the
-    // un-displaced vertex and this lands exactly on the block center.
+    // un-displaced vertex and this lands exactly on the block center. Guarded on
+    // GRASS_GEOMETRY to match the block_center varying's declaration - dimensions
+    // without shader grass (nether/end) don't declare it, so this must not run there.
     block_center = scene_pos + at_midBlock.xyz * rcp(64.0);
 #endif
 

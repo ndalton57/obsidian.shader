@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d0_sky_map:
   Render omnidirectional sky map for reflections and SH lighting
@@ -25,9 +25,6 @@ flat out float aurora_amount;
 flat out mat2x3 aurora_colors;
 
 flat out float rainbow_amount;
-
-#include "/include/sky/clouds/parameters.glsl"
-flat out CloudsParameters clouds_params;
 
 #include "/include/fog/overworld/parameters.glsl"
 flat out OverworldFogParameters fog_params;
@@ -92,7 +89,6 @@ uniform float desert_sandstorm;
 #include "/include/lighting/colors/light_color.glsl"
 #include "/include/lighting/colors/weather_color.glsl"
 #include "/include/sky/aurora_colors.glsl"
-#include "/include/weather/clouds.glsl"
 #include "/include/weather/fog.glsl"
 #include "/include/weather/rainbow.glsl"
 #endif
@@ -141,7 +137,6 @@ void main() {
 
     Weather weather = get_weather();
     rainbow_amount = get_rainbow_amount(weather);
-    clouds_params = get_clouds_parameters(weather);
     fog_params = get_fog_parameters(weather);
 
     // Aurora clouds influence

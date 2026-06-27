@@ -4,6 +4,7 @@ profile.low                            = §eMadal
 profile.medium                         = §aKeskmine
 profile.high                           = §bKõrge
 profile.ultra                          = §dÜlikõrge
+profile.nasa                           = §cNASA
 
 # Screens
 
@@ -14,34 +15,13 @@ screen.fog                             = Udu
 screen.materials                       = Materjalid
 screen.water                           = Vesi
 screen.post                            = Järeltöötlus
-screen.misc                            = Muu
 
-screen.weather                         = Ilm
-screen.colored_lights                  = Värviliste tulede seaded
 screen.rp_settings                     = Ressurssipaki seaded
-screen.reflections                     = Peegeldused
-screen.refraction                      = Murdumine
-screen.light_sources                   = Valgusallikad
-screen.shadows                         = Varjud
-screen.ao                              = Ümbritsev varjutus
-screen.color_grading                   = Värvikorrektsioon
-screen.exposure                        = Valgustus
-screen.lpv_vl                          = Värviliste tulede udu hajumine
-screen.box                             = Valikukast
-screen.developer                       = Arendaja valikud
 
 screen.distant_horizons                = Kaugemad horisondid
 
 screen.aurora                          = Virmalised
-screen.clouds                          = Pilved
-screen.crepuscular_rays                = Kiirte valgusvihud
 screen.stars                           = Tähed
-screen.clouds_cumulus                  = Kumuluspilvede seaded
-screen.clouds_altocumulus              = Altokumuluspilvede seaded
-screen.clouds_cumulus_congestus        = Kumulus-kogumispilvede seaded
-screen.clouds_cirrus                   = Sõõrpilvede seaded
-screen.clouds_minecrafty               = Blokiste pilvede seaded
-screen.clouds_noctilucent              = Öösäravad pilved
 
 screen.fog_rlh                         = Rayleigh' udu
 screen.fog_mie                         = Mie udu
@@ -61,19 +41,17 @@ screen.fog_rlh_taiga                   = Taiga värv
 screen.fog_rlh_jungle                  = Džungli värv
 screen.fog_rlh_swamp                   = Soodes värv
 screen.water_waves                     = Veelaineid
-screen.water_fog_coeff                 = Veeudu koefitsiendid
 
 screen.end_light_color                 = Valguse värv
 screen.end_ambient_color               = Ümbritsev värv
-screen.nether_color                    = Staatiline värv
 
-screen.distance_view                   = Vaatekaugus
 
 option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §eautor: nullptr
 value.INFO.1                           = §aautor: nullptr
 value.INFO.2                           = §bautor: nullptr
 value.INFO.3                           = §dautor: nullptr
+value.INFO.4                           = §cautor: nullptr
 
 # World settings
 
@@ -93,12 +71,8 @@ option.EDGE_HIGHLIGHT                  = Servade esiletõstmine
 option.EDGE_HIGHLIGHT.comment          = Servade esiletõstmise efekt, inspireeritud Minecraft Dungeonsist
 option.EDGE_HIGHLIGHT_SCALE            = Servade esiletõstmise suurus
 option.EDGE_HIGHLIGHT_SCALE.comment    = Määrab servade esiletõstmise paksuse; muuda seda vastavalt oma ressursipaki resolutsioonile
-option.MOON_PHASE_AFFECTS_BRIGHTNESS   = Kuu faas mõjutab valgustust
-option.MOON_PHASE_AFFECTS_BRIGHTNESS.comment = Öine heleduse tase sõltub kuu faasist
 option.DESERT_SANDSTORM                = Kõrbetorm
 option.DESERT_SANDSTORM.comment        = Liivatorm vihma ajal kõrbe biomis
-option.END_GLOW                        = Endi helendus
-option.END_GLOW.comment                = Võbelevalt helendav efekt Endis. Vajab ruumilist udu (Volumetric Fog)
 
 # Weather
 option.RANDOM_WEATHER_VARIATION            = Juhuslik varieeruvus
@@ -265,72 +239,13 @@ option.GALAXY                          = Galaktika
 option.GALAXY.comment                  = Galaktika kujutis öises taevas
 option.GALAXY_INTENSITY                = Galaktika heledus
 option.GALAXY_INTENSITY.comment        = Määrab galaktika heleduse öises taevas
-option.CREPUSCULAR_RAYS                = Lubatud
-option.CREPUSCULAR_RAYS_INTENSITY      = Heledus
-option.CREPUSCULAR_RAYS_STEPS_HORIZON  = Sammude arv – horisont
-option.CREPUSCULAR_RAYS_STEPS_ZENITH   = Sammude arv – seniit
 option.LIGHTNING_FLASH                 = Välgusähvatus
 option.RAINBOWS                        = Vikerkaared
-option.END_SUN_EFFECT                  = Päikeseefekt Endis
 
 # Clouds
-option.CLOUDS_CUMULUS                       = Kumuluspilved
-option.CLOUDS_CUMULUS.comment               = Madala kõrgusega mahulised pilved, mis meenutavad kumuluspilvi
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_H       = Peamised sammud – horisont
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_Z       = Peamised sammud – seniit
-option.CLOUDS_CUMULUS_LIGHTING_STEPS        = Valguse sammud
-option.CLOUDS_CUMULUS_AMBIENT_STEPS         = Ümbritsevad sammud
-option.CLOUDS_CUMULUS_ALTITUDE              = Kõrgus
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_THICKNESS             = Paksus
-option.CLOUDS_CUMULUS_DENSITY               = Tihedus
-option.CLOUDS_CUMULUS_COVERAGE              = Katvus
-option.CLOUDS_CUMULUS_SIZE                  = Suurus
-option.CLOUDS_CUMULUS_DETAIL_STRENGTH       = Detailide tugevus
-option.CLOUDS_CUMULUS_WIND_SPEED            = Tuulekiirus
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m/s
-option.CLOUDS_CUMULUS_WIND_ANGLE            = Tuule suund
-suffix.CLOUDS_CUMULUS_ALTITUDE              = °
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE         = Eelnevalt arvutatud lokaalne katvus
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE.comment = Agressiivne optimeerimine kumuluspilvede jaoks. Vähendab maksimaalset kaugust, milleni pilvi saab kuvada, ja võib põhjustada artefakte pilvede kuju muutumisel kaamera liikumisel. Keela, kui teed ekraanipilte pilvedest kõrgemal
 
-option.CLOUDS_ALTOCUMULUS                       = Altokumuluspilved
-option.CLOUDS_ALTOCUMULUS.comment               = Keskmise kõrgusega mahulised pilved, mis meenutavad altokumuluspilvi
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_H       = Peamised sammud – horisont
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_Z       = Peamised sammud – seniit
-option.CLOUDS_ALTOCUMULUS_LIGHTING_STEPS        = Valguse sammud
-option.CLOUDS_ALTOCUMULUS_AMBIENT_STEPS         = Ümbritsevad sammud
-option.CLOUDS_ALTOCUMULUS_ALTITUDE              = Kõrgus
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m
-option.CLOUDS_ALTOCUMULUS_THICKNESS             = Paksus
-option.CLOUDS_ALTOCUMULUS_DENSITY               = Tihedus
-option.CLOUDS_ALTOCUMULUS_COVERAGE              = Katvus
-option.CLOUDS_ALTOCUMULUS_SIZE                  = Suurus
-option.CLOUDS_ALTOCUMULUS_DETAIL_STRENGTH       = Detailide tugevus
-option.CLOUDS_ALTOCUMULUS_WIND_SPEED            = Tuulekiirus
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m/s
-option.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = Tuule suund
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = °
 
-option.CLOUDS_CUMULUS_CONGESTUS                       = Kumulus-kogumispilved
-option.CLOUDS_CUMULUS_CONGESTUS.comment               = Massiivsed, kaugemal asuvad mahulised pilved
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_H       = Peamised sammud – horisont
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_Z       = Peamised sammud – seniit
-option.CLOUDS_CUMULUS_CONGESTUS_LIGHTING_STEPS        = Valguse sammud
-option.CLOUDS_CUMULUS_CONGESTUS_AMBIENT_STEPS         = Ümbritsevad sammud
-option.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = Kõrgus
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_CONGESTUS_THICKNESS             = Paksus
-option.CLOUDS_CUMULUS_CONGESTUS_DENSITY               = Tihedus
-option.CLOUDS_CUMULUS_CONGESTUS_COVERAGE              = Katvus
-option.CLOUDS_CUMULUS_CONGESTUS_SIZE                  = Suurus
-option.CLOUDS_CUMULUS_CONGESTUS_DETAIL_STRENGTH       = Detailide tugevus
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = Tuulekiirus
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m/s
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = Tuule suund
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = °
 
-option.CLOUDS_NOCTILUCENT              = Noktilutsentsed pilved
 
 option.BLOCKY_CLOUDS                   = Plokilised pilved
 option.BLOCKY_CLOUDS.comment           = Vanilla-stiilis mahulised pilved. Selle valiku lubamine keelab kõik teised pilvetüübid
@@ -357,37 +272,13 @@ value.CLOUDS_TEMPORAL_UPSCALING.2      = 4×
 value.CLOUDS_TEMPORAL_UPSCALING.3      = 9×
 value.CLOUDS_TEMPORAL_UPSCALING.4      = 16×
 
-option.CLOUDS_CIRRUS                       = Cirrus/Cirrokumuluspilved
-option.CLOUDS_CIRRUS.comment               = Lamedad cirrus- ja cirrokumuluspilved
-option.CLOUDS_CIRRUS_LIGHTING_STEPS        = Valguse sammud
-option.CLOUDS_CIRRUS_AMBIENT_STEPS         = Ümbritsevad sammud
-option.CLOUDS_CIRRUS_ALTITUDE              = Kõrgus
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m
-option.CLOUDS_CIRRUS_THICKNESS             = Paksus
-option.CLOUDS_CIRRUS_DENSITY               = Cirruse tihedus
-option.CLOUDS_CIRRUS_COVERAGE              = Cirruse katvus
-option.CLOUDS_CIRRUS_SIZE                  = Cirruse suurus
-option.CLOUDS_CIRRUS_DETAIL_STRENGTH       = Cirruse detailide tugevus
-option.CLOUDS_CIRRUS_CURL_STRENGTH         = Cirruse lokkimise tugevus
-option.CLOUDS_CIRRUS_WIND_SPEED            = Tuulekiirus
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m/s
-option.CLOUDS_CIRRUS_WIND_ANGLE            = Tuule suund
-suffix.CLOUDS_CIRRUS_ALTITUDE              = °
-option.CLOUDS_CIRROCUMULUS_DENSITY         = Cirrokumuluse tihedus
-option.CLOUDS_CIRROCUMULUS_COVERAGE        = Cirrokumuluse katvus
-option.CLOUDS_CIRROCUMULUS_SIZE            = Cirrokumuluse suurus
-option.CLOUDS_CIRROCUMULUS_DETAIL_STRENGTH = Cirrokumuluse detailide tugevus
-option.CLOUDS_CIRROCUMULUS_CURL_STRENGTH   = Cirrokumuluse lokkimise tugevus
 
-option.CLOUDS_NOCTILUCENT_INTENSITY    = Heledus
-option.CLOUDS_NOCTILUCENT_RARITY       = Haruldus
 
 option.AURORA_NORMAL                   = Virmalised igas biomis
 option.AURORA_SNOW                     = Virmalised lume biomis
 option.AURORA_BRIGHTNESS               = Virmaliste heledus
 option.AURORA_FREQUENCY                = Virmaliste sagedus
 option.AURORA_CLOUD_LIGHTING           = Pilve valguspanus
-option.AURORA_GROUND_LIGHTING          = Maapinna valguspanus
 
 value.AURORA_NORMAL.AURORA_NEVER       = Mitte kunagi
 value.AURORA_NORMAL.AURORA_RARELY      = Harva
@@ -487,7 +378,7 @@ option.SPECULAR_MAPPING                = Spekulaarkaardistus
 option.SPECULAR_MAPPING.comment        = Kas kasutada ressurssipaki spekulaarkaarte. Lülita sisse PBR‑pakiga
 option.POM                             = Parallax Occlusion Mapping
 option.TEXTURE_FORMAT                  = Tekstuuri formaat
-option.TEXTURE_FORMAT.comment          = Ressurssipaki kasutatav tekstuuriformaat. Enamik kaasaegseid pakke kasutab lab_p_b_r, samas kui SEUS‑iga töötavad võivad kasutada OldPBR
+option.TEXTURE_FORMAT.comment          = Ressurssipaki kasutatav tekstuuriformaat. Enamik kaasaegseid pakke kasutab lab_p_b_r, vanemad pakid võivad kasutada OldPBR
 option.HARDCODED_SPECULAR              = Kauakodeeritud spekulaarsus
 option.HARDCODED_SPECULAR.comment      = Teatud plokkide (nt metalli) spekulaarkaarte on eelnevalt kooditud
 option.HARDCODED_EMISSION              = Kauakodeeritud emissioon
@@ -683,7 +574,7 @@ option.TONEMAP_COMPARISON.comment      = Võrdleb kahte toonikaartide funktsioon
 option.tonemap_left                    = Vasak toonikaart
 option.tonemap_right                   = Parem toonikaart
 option.FANCY_NETHER_PORTAL             = Efektne Netheri portaal
-option.FANCY_NETHER_PORTAL.comment     = Efektne netheri portaali efekt, inspireeritud Complementary Reimagined shaderitest (EminGT). Võib mitte töötada õigesti mõne ressursipakiga
+option.FANCY_NETHER_PORTAL.comment     = Efektne kihilise parallaksiga netheri portaali efekt. Võib mitte töötada õigesti mõne ressursipakiga
 option.CUSTOM_SKY                      = Kohandatud taevas
 option.CUSTOM_SKY.comment              = Lülitab sisse kohandatud taeva ressursipakkidest
 option.CUSTOM_SKY_BRIGHTNESS           = Kohandatud taeva heledus

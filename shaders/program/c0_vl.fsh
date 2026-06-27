@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/c0_vl:
   Calculate volumetric fog
@@ -10,6 +10,16 @@
 */
 
 #include "/include/global.glsl"
+
+// The End: Voxy's state there is unreliable (it logs zero-size viewports, and
+// its depth/projection uniforms reconstruct LoD geometry at displaced
+// positions), so the fog march must not substitute LoD depth for sky/void
+// pixels — doing so silhouettes huge dark ghost copies of pillars/ships/
+// islands into the fog that swim with the camera. Fog in the End marches
+// against vanilla depth only.
+#if defined WORLD_END && defined LOD_MOD_ACTIVE
+#undef LOD_MOD_ACTIVE
+#endif
 
 layout(location = 0) out vec3 fog_transmittance;
 layout(location = 1) out vec3 fog_scattering;
@@ -32,7 +42,12 @@ flat in OverworldFogParameters fog_params;
 
 uniform sampler2D noisetex;
 
-uniform sampler3D colortex0; // 3D worley noise
+uniform sampler2D cloud_noisetex; // cloud/fog shape noise (customTexture)
+#define CLOUD_NOISETEX cloud_noisetex
+
+#if defined WORLD_END
+uniform sampler2D end_state_sampler; // End thunder state (e0_end_thunder.csh)
+#endif
 uniform sampler2D colortex1; // gbuffer data
 uniform sampler2D colortex3; // translucent color
 uniform sampler2D colortex4; // sky map
@@ -62,6 +77,7 @@ uniform mat4 shadowProjection;
 uniform mat4 shadowProjectionInverse;
 
 uniform vec3 cameraPosition;
+uniform vec3 fogColor;
 
 uniform float near;
 uniform float far;
@@ -71,6 +87,7 @@ uniform float darknessFactor;
 uniform float eyeAltitude;
 uniform float rainStrength;
 uniform float wetness;
+uniform float biome_may_rain;
 
 uniform float sunAngle;
 uniform float frameTimeCounter;
@@ -104,6 +121,10 @@ uniform float time_midnight;
 
 #if defined WORLD_OVERWORLD
 #include "/include/fog/overworld/raymarched.glsl"
+#endif
+
+#if defined WORLD_NETHER
+#include "/include/fog/nether_plume_vl.glsl"
 #endif
 
 #if defined WORLD_END
@@ -188,14 +209,23 @@ void main() {
                 dither
             );
 #elif defined WORLD_NETHER
-            mat2x3 fog = mat2x3(vec3(0.0), vec3(1.0));
+            mat2x3 fog = raymarch_nether_plumes(
+                world_start_pos,
+                world_end_pos,
+                depth0 == 1.0,
+                dither
+            );
 #elif defined WORLD_END
+#ifdef END_FOG
             mat2x3 fog = raymarch_end_fog(
                 world_start_pos,
                 world_end_pos,
                 depth0 == 1.0,
                 dither
             );
+#else
+            mat2x3 fog = mat2x3(vec3(0.0), vec3(1.0));
+#endif
 #endif
 
             fog_scattering = fog[0];

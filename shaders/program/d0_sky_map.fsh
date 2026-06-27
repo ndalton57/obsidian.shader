@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d0_sky_map:
   Render omnidirectional sky map for reflections and SH lighting
@@ -30,9 +30,6 @@ flat in mat2x3 aurora_colors;
 
 flat in float rainbow_amount;
 
-#include "/include/sky/clouds/parameters.glsl"
-flat in CloudsParameters clouds_params;
-
 #include "/include/fog/overworld/parameters.glsl"
 flat in OverworldFogParameters fog_params;
 #endif
@@ -41,10 +38,6 @@ flat in OverworldFogParameters fog_params;
 //   Uniforms
 // ------------
 
-uniform sampler3D colortex6; // 3D bubbly worley noise
-#define SAMPLER_WORLEY_BUBBLY colortex6
-uniform sampler3D colortex7; // 3D swirley worley noise
-#define SAMPLER_WORLEY_SWIRLEY colortex7
 
 #if defined WORLD_OVERWORLD && defined GALAXY
 uniform sampler2D colortex13;
@@ -111,11 +104,6 @@ uniform float biome_may_snow;
 // ------------
 
 #define ATMOSPHERE_SCATTERING_LUT depthtex0
-#define CLOUDS_USE_LOCAL_COVERAGE_MAP
-
-#ifdef CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE
-#define CLOUDS_USE_LOCAL_COVERAGE_MAP
-#endif
 
 #if defined WORLD_OVERWORLD
 #include "/include/fog/overworld/analytic.glsl"

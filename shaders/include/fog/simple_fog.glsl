@@ -116,7 +116,7 @@ vec4 common_fog(float view_dist, const bool sky) {
     fog.a *= cave_fog;
 #endif
 
-#if defined WORLD_NETHER
+#if defined WORLD_NETHER && defined NETHER_FOG
     // Nether fog
     float nether_fog
         = spherical_fog(view_dist, nether_fog_start, nether_fog_density);
@@ -161,7 +161,7 @@ float common_fog_alpha(float view_dist, bool sky) {
     ); // Cave fog
 #endif
 
-#if defined WORLD_NETHER
+#if defined WORLD_NETHER && defined NETHER_FOG
     // Nether fog
     fog *= spherical_fog(view_dist, nether_fog_start, nether_fog_density);
 #endif

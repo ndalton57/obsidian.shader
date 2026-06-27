@@ -4,6 +4,7 @@ profile.low                            = §eLow
 profile.medium                         = §aMedium
 profile.high                           = §bHigh
 profile.ultra                          = §dUltra
+profile.nasa                           = §cNASA
 
 # Screens
 
@@ -12,28 +13,17 @@ screen.lighting                        = Lighting
 screen.sky                             = Sky
 screen.fog                             = Fog
 screen.materials                       = Materials
+screen.materials_debug                 = Debug
 screen.water                           = Water
 screen.post                            = Post-Processing
 screen.geometry                        = Procedural Geometry
-screen.misc                            = Misc
 screen.mods                            = Mod Options
 
-screen.weather                         = Weather
+screen.world_debug                     = Debug
 screen.grass                           = Shader Grass
 screen.grass_debug                     = Debug
-screen.colored_lights                  = Colored Lights Settings
 screen.rp_settings                     = Resource Pack Settings
-screen.reflections                     = Reflections
-screen.refraction                      = Refraction
 screen.cherry_grove                    = Cherry Grove Grass
-screen.light_sources                   = Light Sources
-screen.shadows                         = Shadows
-screen.ao                              = Ambient Occlusion
-screen.color_grading                   = Color Grading
-screen.exposure                        = Exposure
-screen.lpv_vl                          = Colored Lights Fog Scattering
-screen.box                             = Selection Box
-screen.developer                       = Developer Options
 
 screen.distant_horizons                = Distant Horizons
 screen.photonics                       = Photonics
@@ -41,19 +31,12 @@ screen.photonics_sharp                 = Sharp Settings
 screen.photonics_restir                = ReSTIR Settings
 
 screen.aurora                          = Aurora
-screen.clouds                          = Clouds
-screen.crepuscular_rays                = Crepuscular Rays
 screen.stars                           = Stars
-screen.clouds_cumulus                  = Cumulus Clouds Settings
-screen.clouds_altocumulus              = Altocumulus Clouds Settings
-screen.clouds_cumulus_congestus        = Cumulus Congestus Clouds Settings
-screen.clouds_cirrus                   = Cirrus/Cirrocumulus Clouds Settings
-screen.clouds_minecrafty               = Blocky Clouds Settings
-screen.clouds_noctilucent              = Noctilucent Clouds Settings
 
 screen.fog_rlh                         = Rayleigh Fog
 screen.fog_mie                         = Mie Fog
 screen.bedrock_fog                     = Bedrock Fog
+screen.fog_debug                       = Debug
 screen.sunlight_color                  = Sunlight Color
 screen.moonlight_color                 = Moonlight Color
 screen.blocklight_color                = Blocklight Color
@@ -70,19 +53,17 @@ screen.fog_rlh_taiga                   = Taiga Color
 screen.fog_rlh_jungle                  = Jungle Color
 screen.fog_rlh_swamp                   = Swamp Color
 screen.water_waves                     = Water Waves
-screen.water_fog_coeff                 = Water Fog Coefficients
 
 screen.end_light_color                 = Light Color
 screen.end_ambient_color               = Ambient Color
-screen.nether_color                    = Static Color
 
-screen.distance_view                   = Distance View
 
 option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §eby nullptr
 value.INFO.1                           = §aby nullptr
 value.INFO.2                           = §bby nullptr
 value.INFO.3                           = §dby nullptr
+value.INFO.4                           = §cby nullptr
 
 # World settings
 
@@ -137,29 +118,38 @@ option.EDGE_HIGHLIGHT                  = Edge Highlight
 option.EDGE_HIGHLIGHT.comment          = Edge highlighting effect inspired by Minecraft Dungeons
 option.EDGE_HIGHLIGHT_SCALE            = Edge Highlight Scale
 option.EDGE_HIGHLIGHT_SCALE.comment    = Controls the thickness of the edge highlight; change this to match your resource pack resolution
-option.MOON_PHASE_AFFECTS_BRIGHTNESS   = Moon Phase Affects Lighting
-option.MOON_PHASE_AFFECTS_BRIGHTNESS.comment = Night time brightness is affected by the moon phase
 option.DESERT_SANDSTORM                = Desert Sandstorm
 option.DESERT_SANDSTORM.comment        = Sandstorm during rain in desert biome
-option.END_GLOW                        = End Glow
-option.END_GLOW.comment                = Wavery glowing effect in the End. Requires Volumetric Fog
-
-# Weather
-option.RANDOM_WEATHER_VARIATION            = Random Variation
-option.BIOME_WEATHER_VARIATION             = Biome-based Variation
-option.WEATHER_TEMPERATURE_BIAS            = Temperature Bias
-option.WEATHER_HUMIDITY_BIAS               = Humidity Bias
-option.WEATHER_WIND_BIAS                   = Windiness Bias
-option.WEATHER_TEMPERATURE_VARIATION_SPEED = Temperature Variation Speed
-option.WEATHER_HUMIDITY_VARIATION_SPEED    = Humidity Variation Speed
-option.WEATHER_WIND_VARIATION_SPEED        = Windiness Variation Speed
+option.END_LIGHTNING                   = End Thunder
+option.END_LIGHTNING.comment           = Chaotic lightning flashes inside the End storm, from a light source that wanders near the player. Requires Volumetric Lighting
+option.END_STORM_DENSTIY               = End Storm Density
+option.END_STORM_DENSTIY.comment       = Density of the swirling storm clouds surrounding the main End island. Requires Volumetric Lighting
+option.END_HAZE_DENSTIY                = End Haze Density
+option.END_HAZE_DENSTIY.comment        = Faint blue distance haze across the End. Requires Volumetric Lighting
+option.END_FOG_BRIGHTNESS              = End Fog Brightness
+option.END_FOG_BRIGHTNESS.comment      = Overall brightness of the End storm, thunder and haze
+option.END_FOG                         = End Fog
+option.END_FOG.comment                 = The End storm volumetrics - the swirling vortex around the main island, the thunder, the void fog and the distance haze
+option.NETHER_HAZE                     = Nether Haze
+option.NETHER_HAZE.comment             = The biome-tinted air glow and the pale ceiling smoke, together
+option.NETHER_PLUME                    = Nether Lava Plumes
+option.NETHER_PLUME.comment            = Glowing fog pouring off the nether lava seas, rising and eroding into wisps
+option.NETHER_PLUME_DENSITY            = Lava Plume Density
+option.NETHER_PLUME_DENSITY.comment    = Glowing fog pouring off the nether lava seas, rising and eroding into wisps. Requires Volumetric Lighting
+option.NETHER_HAZE_DENSITY             = Nether Haze Intensity
+option.NETHER_HAZE_DENSITY.comment     = Uniform glowing veil tinted by the biome fog color, filling the air between the lava plumes. Requires Volumetric Lighting
+option.NETHER_CEILING_SMOKE_DENSITY    = Ceiling Smoke Density
+option.NETHER_CEILING_SMOKE_DENSITY.comment = Pale smoke layer gathering under the nether ceiling. Requires Volumetric Lighting
 
 # Lighting settings
 
 option.COLORED_LIGHTS                  = Colored Lights
 option.COLORED_LIGHTS.comment          = Variable-color block lighting using flood fill algorithm. Requires Iris 1.6 or above
+option.SSS                             = Subsurface Scattering
+option.SSS.comment                     = Sunlight passes through foliage and thin blocks, and glows through the sun-facing edges of solid ground
+screen.lighting_debug                  = Debug
 option.HANDHELD_LIGHTING               = Handheld Lighting
-option.HANDHELD_LIGHTING.comment       = Handheld items cast light on the world. If coloured lighting is enabled the handheld lighting will be coloured like the lights themselves
+option.HANDHELD_LIGHTING.comment       = Handheld items cast light on the world, coloured like the light source itself
 option.HANDHELD_LIGHTING_INTENSITY     = Handheld Lighting Intensity
 option.HANDHELD_LIGHTING_INTENSITY.comment = Adjusts the brightness of handheld light sources
 option.AO_IN_SUNLIGHT                  = AO in Sunlight
@@ -209,7 +199,7 @@ option.PIXELATED_SHADOWS_RESOLUTION    = Pixelated Shadows Resolution
 option.SSS_STEPS                       = SSS Steps 
 option.SSS_STEPS.comment               = Increase to reduce noise on foliage and other materials with SSS, at the cost of performance.
 
-option.SHADER_AO                       = Shader AO
+option.SHADER_AO                       = AO Method
 option.SHADER_AO.comment               = AO method used. Off - no shader AO. SSAO - lower quality but requires fewer samples/less filtering. GTAO - better quality but requires more samples/filtering
 value.SHADER_AO.SHADER_AO_NONE         = Off
 value.SHADER_AO.SHADER_AO_SSAO         = SSAO
@@ -328,72 +318,51 @@ option.GALAXY                          = Galaxy
 option.GALAXY.comment                  = Galaxy image in the night sky
 option.GALAXY_INTENSITY                = Galaxy Intensity
 option.GALAXY_INTENSITY.comment        = Controls the brightness of the galaxy in the night sky
-option.CREPUSCULAR_RAYS                = Enabled
-option.CREPUSCULAR_RAYS_INTENSITY      = Intensity
-option.CREPUSCULAR_RAYS_STEPS_HORIZON  = Step Count - Horizon
-option.CREPUSCULAR_RAYS_STEPS_ZENITH   = Step Count - Zenith
 option.LIGHTNING_FLASH                 = Lightning Flash
 option.RAINBOWS                        = Rainbows
-option.END_SUN_EFFECT                  = End Sun Effect
 
 # Clouds
-option.CLOUDS_CUMULUS                       = Cumulus Clouds
-option.CLOUDS_CUMULUS.comment               = Low-altitude volumetric clouds made to resemble cumulus clouds
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_H       = Primary Steps - Horizon
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_Z       = Primary Steps - Zenith
-option.CLOUDS_CUMULUS_LIGHTING_STEPS        = Lighting Steps
-option.CLOUDS_CUMULUS_AMBIENT_STEPS         = Ambient Steps
-option.CLOUDS_CUMULUS_ALTITUDE              = Altitude
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_THICKNESS             = Thickness
-option.CLOUDS_CUMULUS_DENSITY               = Density
-option.CLOUDS_CUMULUS_COVERAGE              = Coverage
-option.CLOUDS_CUMULUS_SIZE                  = Size
-option.CLOUDS_CUMULUS_DETAIL_STRENGTH       = Detail Strength
-option.CLOUDS_CUMULUS_WIND_SPEED            = Wind Speed
-suffix.CLOUDS_CUMULUS_WIND_SPEED            = m/s
-option.CLOUDS_CUMULUS_WIND_ANGLE            = Wind Angle
-suffix.CLOUDS_CUMULUS_WIND_ANGLE            = °
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE         = Precompute Local Coverage
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE.comment = Aggressive optimization for cumulus clouds. Reduces the maximum distance clouds can be drawn and can cause some artifacts with cloud shapes morphing when the camera moves. Disable for taking screenshots above the clouds
+option.CLOUD_TYPE                      = Cloud Type
+option.CLOUD_TYPE.comment              = Volumetric - the three-layer cloud field (large cumulus, small cumulus, altostratus). Blocky - Minecraft-style shaped clouds
+value.CLOUD_TYPE.0                     = Volumetric
+value.CLOUD_TYPE.1                     = Blocky
+value.CLOUD_TYPE.2                     = Off
+option.CLOUD_HEIGHT                    = Cloud Height
+option.CLOUD_HEIGHT.comment            = Altitude of the lowest cloud layer. Every other layer moves with it, keeping its relative spacing
 
-option.CLOUDS_ALTOCUMULUS                       = Altocumulus Clouds
-option.CLOUDS_ALTOCUMULUS.comment               = Mid-altitude volumetric clouds made to resemble altocumulus clouds
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_H       = Primary Steps - Horizon
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_Z       =  Primary Steps - Zenith
-option.CLOUDS_ALTOCUMULUS_LIGHTING_STEPS        = Lighting Steps
-option.CLOUDS_ALTOCUMULUS_AMBIENT_STEPS         = Ambient Steps
-option.CLOUDS_ALTOCUMULUS_ALTITUDE              = Altitude
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m
-option.CLOUDS_ALTOCUMULUS_THICKNESS             = Thickness
-option.CLOUDS_ALTOCUMULUS_DENSITY               = Density
-option.CLOUDS_ALTOCUMULUS_COVERAGE              = Coverage
-option.CLOUDS_ALTOCUMULUS_SIZE                  = Size
-option.CLOUDS_ALTOCUMULUS_DETAIL_STRENGTH       = Detail Strength
-option.CLOUDS_ALTOCUMULUS_WIND_SPEED            = Wind Speed
-suffix.CLOUDS_ALTOCUMULUS_WIND_SPEED            = m/s
-option.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = Wind Angle
-suffix.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = °
+option.CloudLayer0                     = Large Cumulus Layer
+option.CloudLayer0.comment             = Low, large volumetric cumulus clouds. During rain this layer thickens into the storm deck
+option.CloudLayer0_coverage            = Coverage
+option.CloudLayer0_density             = Density
+option.CloudLayer0_height              = Altitude
+suffix.CloudLayer0_height              = m
 
-option.CLOUDS_CUMULUS_CONGESTUS                       = Cumulus Congestus Clouds
-option.CLOUDS_CUMULUS_CONGESTUS.comment               = Massive, distant volumetric clouds
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_H       = Primary Steps - Horizon
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_Z       = Primary Steps - Zenith
-option.CLOUDS_CUMULUS_CONGESTUS_LIGHTING_STEPS        = Lighting Steps
-option.CLOUDS_CUMULUS_CONGESTUS_AMBIENT_STEPS         = Ambient Steps
-option.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = Altitude
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_CONGESTUS_THICKNESS             = Thickness
-option.CLOUDS_CUMULUS_CONGESTUS_DENSITY               = Density
-option.CLOUDS_CUMULUS_CONGESTUS_COVERAGE              = Coverage
-option.CLOUDS_CUMULUS_CONGESTUS_SIZE                  = Size
-option.CLOUDS_CUMULUS_CONGESTUS_DETAIL_STRENGTH       = Detail Strength
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = Wind Speed
-suffix.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = m/s
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = Wind Angle
-suffix.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = °
+option.CloudLayer1                     = Small Cumulus Layer
+option.CloudLayer1.comment             = Smaller, higher volumetric cumulus clouds. This layer fades out during rain
+option.CloudLayer1_coverage            = Coverage
+option.CloudLayer1_density             = Density
+option.CloudLayer1_height              = Altitude
+suffix.CloudLayer1_height              = m
 
-option.CLOUDS_NOCTILUCENT               = Noctilucent Clouds
+option.CloudLayer2                     = Altostratus Layer
+option.CloudLayer2.comment             = Flat, high-altitude cloud sheet. During rain it closes into full overcast
+option.CloudLayer2_coverage            = Coverage
+option.CloudLayer2_density             = Density
+option.CloudLayer2_height              = Altitude
+suffix.CloudLayer2_height              = m
+
+option.Rain_coverage                   = Storm Coverage
+option.Rain_coverage.comment           = Cloud coverage that the large cumulus layer reaches in full rain
+option.Cloud_Speed                     = Cloud Speed
+suffix.Cloud_Speed                     = ×
+option.minRayMarchSteps                = March Steps - Base
+option.minRayMarchSteps.comment        = Raymarching steps for the cloud layers. The step count scales between base and max with the view angle
+option.maxRayMarchSteps                = March Steps - Max
+option.fbmAmount                       = Noise Erosion Amount
+option.CLOUDS_SOFTNESS                 = Cloud Softness
+option.CLOUDS_SOFTNESS.comment         = Reads the cloud buffer at a reduced detail level for a softer, more diffuse cloud look. 0 keeps the full-resolution sharpness
+option.Daily_Weather                   = Daily Weather
+option.Daily_Weather.comment           = Cycles the sky through ten day profiles as world days pass, from fully clear to heavy overcast. When off, the layer settings above apply every day
 
 option.BLOCKY_CLOUDS                     = Blocky Clouds
 option.BLOCKY_CLOUDS.comment             = Vanilla-styled volumetric clouds. Enabling this option disables all other cloud types
@@ -426,47 +395,18 @@ suffix.BLOCKY_CLOUDS_WIND_SPEED          = m/s
 option.BLOCKY_CLOUDS_WIND_ANGLE          = Wind Angle
 suffix.BLOCKY_CLOUDS_WIND_ANGLE          = °
 
-option.CLOUDS_TEMPORAL_UPSCALING       = Temporal Upscaling
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = Aerial Perspective Boost
-option.CLOUDS_SCALE                    = Scale
-option.CLOUDS_SCALE.comment            = Applied as a scale factor to all clouds, to bring the clouds from a realistic size and altitude to an altitude that is accessible during gameplay. If this value is 1.0, clouds are positioned realistically, with the first layer 800 blocks up by default. If this value is higher, then clouds will appear smaller and form closer to the ground. This also affects the size of cloud shadows
-suffix.CLOUDS_SCALE                    = ×
-value.CLOUDS_TEMPORAL_UPSCALING.1      = Off
-value.CLOUDS_TEMPORAL_UPSCALING.2      = 4×
+option.CLOUDS_TEMPORAL_UPSCALING       = Cloud Render Mode
+option.CLOUDS_TEMPORAL_UPSCALING.comment = Full Res marches every pixel every frame (sharpest, slowest). Half Res re-renders a complete half-resolution cloud image every frame - stable in motion, the recommended mode. 9x and 16x spread full-resolution samples across frames for less cost, but can show artifacts while the camera moves
+value.CLOUDS_TEMPORAL_UPSCALING.1      = Full Res
+value.CLOUDS_TEMPORAL_UPSCALING.2      = Half Res
 value.CLOUDS_TEMPORAL_UPSCALING.3      = 9×
 value.CLOUDS_TEMPORAL_UPSCALING.4      = 16×
-
-option.CLOUDS_CIRRUS                       = Cirrus/Cirrocumulus Clouds
-option.CLOUDS_CIRRUS.comment               = Planar cirrus and cirrocumulus clouds
-option.CLOUDS_CIRRUS_LIGHTING_STEPS        = Lighting Steps
-option.CLOUDS_CIRRUS_AMBIENT_STEPS         = Ambient Steps
-option.CLOUDS_CIRRUS_ALTITUDE              = Altitude
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m
-option.CLOUDS_CIRRUS_THICKNESS             = Thickness
-option.CLOUDS_CIRRUS_DENSITY               = Cirrus Density
-option.CLOUDS_CIRRUS_COVERAGE              = Cirrus Coverage
-option.CLOUDS_CIRRUS_SIZE                  = Cirrus Size
-option.CLOUDS_CIRRUS_DETAIL_STRENGTH       = Cirrus Detail Strength
-option.CLOUDS_CIRRUS_CURL_STRENGTH         = Cirrus Curl Strength
-option.CLOUDS_CIRRUS_WIND_SPEED            = Wind Speed
-suffix.CLOUDS_CIRRUS_WIND_SPEED            = m/s
-option.CLOUDS_CIRRUS_WIND_ANGLE            = Wind Angle
-suffix.CLOUDS_CIRRUS_WIND_ANGLE            = °
-option.CLOUDS_CIRROCUMULUS_DENSITY         = Cirrocumulus Density
-option.CLOUDS_CIRROCUMULUS_COVERAGE        = Cirrocumulus Coverage
-option.CLOUDS_CIRROCUMULUS_SIZE            = Cirrocumulus Size
-option.CLOUDS_CIRROCUMULUS_DETAIL_STRENGTH = Cirrocumulus Detail Strength
-option.CLOUDS_CIRROCUMULUS_CURL_STRENGTH   = Cirrocumulus Curl Strength
-
-option.CLOUDS_NOCTILUCENT_INTENSITY    = Intensity
-option.CLOUDS_NOCTILUCENT_RARITY       = Rarity
 
 option.AURORA_NORMAL                   = Aurora in Any Biome
 option.AURORA_SNOW                     = Aurora in Snow Biome
 option.AURORA_BRIGHTNESS               = Aurora Brightness
 option.AURORA_FREQUENCY                = Aurora Frequency
 option.AURORA_CLOUD_LIGHTING           = Cloud Light Contribution
-option.AURORA_GROUND_LIGHTING          = Ground Light Contribution
 
 value.AURORA_NORMAL.AURORA_NEVER       = Never
 value.AURORA_NORMAL.AURORA_RARELY      = Rarely
@@ -488,6 +428,8 @@ option.BLOOMY_FOG_INTENSITY                 = Bloomy Fog Intensity
 option.BLOOMY_FOG_INTENSITY.comment         = Adjusts the intensity of "bloomy fog"
 option.BEDROCK_FOG                          = Bedrock Fog
 option.BEDROCK_FOG.comment                  = A self-lit fog that pools in the bottom of any world (caves, low valleys). Its colour and brightness are fixed - it does not change with time of day, weather, or sun, and dissipates upward at a rate scaled to the world's height so it always sits low. Configure it in the Bedrock Fog sub-menu
+option.ATMOSPHERIC_HAZE                = Atmospheric Haze
+option.ATMOSPHERIC_HAZE.comment        = Aerial-perspective haze on distant terrain, at all altitudes
 option.ATMOSPHERIC_HAZE_DENSITY             = Atmospheric Haze Density
 option.ATMOSPHERIC_HAZE_DENSITY.comment     = A separate aerial-perspective haze on distant terrain that works at ALL altitudes (incl. high mountains). 0.00 = off, and leaves all other fog untouched. Slider is 0.00-1.00; around 0.30-0.60 is usually a nice subtle haze
 option.ATMOSPHERIC_HAZE_NIGHT_FLOOR         = Atmospheric Haze Night Floor
@@ -499,6 +441,8 @@ option.BEDROCK_FOG_DISSIPATION.comment      = How fast the bedrock fog thins out
 option.BEDROCK_FOG_COLOR_R                  = Red
 option.BEDROCK_FOG_COLOR_G                  = Green
 option.BEDROCK_FOG_COLOR_B                  = Blue
+option.NETHER_FOG                      = Nether Fog
+option.NETHER_FOG.comment              = Ambient distance fog in the nether, tinted by the biome
 option.NETHER_FOG_INTENSITY                 = Nether Fog Intensity
 option.VL                                   = Volumetric Fog
 option.LPV_VL.comment                       = Light sources illuminate the fog. Requires Colored Lights! 
@@ -507,6 +451,10 @@ option.VL_RENDER_SCALE                      = VL Render Scale
 option.AIR_FOG_CLOUDY_NOISE                 = Cloudy Fog
 option.AIR_FOG_CLOUDY_NOISE.comment         = Subtle cloudy shapes in the fog, best visible in the morning.\nRequires volumetric fog!
 option.AIR_FOG_COLORED_LIGHT_SHAFTS         = Colored Light Shafts
+option.RAIN_FOG                        = Rain Fog
+option.RAIN_FOG.comment                = Low ground fog that rolls in while it rains
+option.RAIN_FOG_INTENSITY              = Rain Fog Intensity
+option.RAIN_FOG_INTENSITY.comment           = Low fog blanket that rolls in while raining, anchored just above sea level. Requires Volumetric Lighting
 option.AIR_FOG_COLORED_LIGHT_SHAFTS.comment = Light shafts passing through translucent objects are tinted by their color
 
 # LPV VL
@@ -579,7 +527,17 @@ option.SPECULAR_MAPPING                = Specular Mapping
 option.SPECULAR_MAPPING.comment        = Whether to use the specular maps provided by the resource pack. Enable this if you are using a "PBR" resource pack
 option.POM                             = Parallax Occlusion Mapping
 option.TEXTURE_FORMAT                  = Texture Format
-option.TEXTURE_FORMAT.comment          = The texture format used by the resource pack. Most modern resource packs use lab_p_b_r, while packs that are designed to work with SEUS may use OldPBR.
+option.TEXTURE_FORMAT.comment          = The texture format used by the resource pack. Most modern resource packs use lab_p_b_r, while older packs may use OldPBR.
+option.FANCY_LAVA                      = Fancy Lava
+option.FANCY_LAVA.comment              = Procedural animated lava texture - the bright molten areas pick up a flowing pattern
+option.SCULK_GLOW                      = Sculk Glow
+option.SCULK_GLOW.comment              = Sculk patches glow at any distance and cast a soft teal light on the blocks around them
+option.SCULK_GLOW_INTENSITY            = Sculk Glow Intensity
+option.SCULK_GLOW_INTENSITY.comment    = Brightness of the sculk glow and its cast light, adjusted together
+option.GLOWING_ORE                     = Glowing Ore
+option.GLOWING_ORE.comment             = Ore veins glow softly by their color while the surrounding stone stays dark
+option.GLOWING_ORE_INTENSITY           = Glowing Ore Brightness
+option.GLOWING_ORE_INTENSITY.comment   = Dims the ore glow and its cast light together. The default is the maximum
 option.HARDCODED_SPECULAR              = Hardcoded Specular
 option.HARDCODED_SPECULAR.comment      = Hardcoded specular reflections for some blocks (eg metals)
 option.HARDCODED_EMISSION              = Hardcoded Emission
@@ -763,6 +721,8 @@ option.PURKINJE_SHIFT_INTENSITY        = Purkinje Shift Intensity
 
 # Exposure
 
+option.AUTO_EXPOSURE_RATE              = Exposure Rate
+option.AUTO_EXPOSURE_RATE.comment      = How quickly the eye adapts to brightness changes, in both directions
 option.AUTO_EXPOSURE                         = Auto Exposure
 option.AUTO_EXPOSURE_BIAS                    = Exposure Bias
 option.AUTO_EXPOSURE_MIN                     = Minimum Exposure
@@ -790,14 +750,14 @@ option.TONEMAP_COMPARISON.comment      = Compare two tonemapping functions on th
 option.tonemap_left                    = Left Tonemap
 option.tonemap_right                   = Right Tonemap
 option.FANCY_NETHER_PORTAL             = Fancy Nether Portal
-option.FANCY_NETHER_PORTAL.comment     = Fancy nether portal effect inspired by Complementary Reimagined Shaders by EminGT, thanks to Emin for letting me use his idea! May not work as well with some resource packs
+option.FANCY_NETHER_PORTAL.comment     = Layered parallax nether portal effect. May not work as well with some resource packs
 option.CUSTOM_SKY                      = Custom Sky
 option.CUSTOM_SKY.comment              = Enable custom skies from resource packs
 option.CUSTOM_SKY_BRIGHTNESS           = Custom Sky Brightness
 option.CUSTOM_SKY_BRIGHTNESS.comment   = Adjust custom sky brightness
 option.ENCHANTMENT_GLINT_BRIGHTNESS    = Enchantment Glint Brightness
 option.DITHERED_TRANSLUCENCY_FALLBACK  = Dithered Translucency Fallback 
-comment.DITHERED_TRANSLUCENCY_FALLBACK = Uses dithered translucency to improve the look of objects that should be translucent but can't when separateEntityDraws is enabled. 
+comment.DITHERED_TRANSLUCENCY_FALLBACK = Uses dithered translucency to improve the look of objects that should be translucent but can't when separateEntityDraws is enabled.
 
 value.DEBUG_VIEW.DEBUG_VIEW_NONE       = OFF
 value.DEBUG_VIEW.DEBUG_VIEW_SAMPLER    = Sampler

@@ -2,7 +2,6 @@
 #define INCLUDE_SKY_CLOUDS_COMMON
 
 #include "/include/sky/atmosphere.glsl"
-#include "/include/sky/clouds/constants.glsl"
 #include "/include/utility/color.glsl"
 #include "/include/utility/fast_math.glsl"
 #include "/include/utility/geometry.glsl"

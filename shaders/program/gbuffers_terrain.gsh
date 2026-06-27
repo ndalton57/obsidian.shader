@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/gbuffers_terrain.gsh:
   Shader Grass. Geometry shader that turns grass into real
@@ -338,8 +338,9 @@ void emit_passthrough(bool grower) {
         // green; push the brown base toward the far plane so the overlay wins. Applied over
         // the whole side - resource packs may run the grass overlay the full height of the
         // block, not just a top fringe - and the green overlay quad is left at its true depth
-        // (so the depth buffer the deferred AO reads is the unbiased overlay). See CLAUDE.md
-        // gotcha #12.
+        // (so the depth buffer the deferred AO reads is the unbiased overlay). Only the
+        // tessellated grower face needs this; keep the bias TINY - a larger value over-pushes
+        // the base at distance and itself flickers. See CLAUDE.md gotcha #12.
         vec3 ft = v_in[i].tint.rgb;
         bool greenish = ft.g > ft.r + 0.04 && ft.g > ft.b + 0.04;
         if (grower && abs(v_in[i].tbn[2].y) < 0.5 && !greenish) {

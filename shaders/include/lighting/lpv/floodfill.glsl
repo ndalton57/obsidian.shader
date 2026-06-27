@@ -3,14 +3,20 @@
 
 #include "voxelization.glsl"
 
-bool is_emitter(uint block_id) { return 32u <= block_id && block_id < 64u; }
+// Emitters live in two ID ranges: 32-63 (the original set, light_color
+// indices 0-31) and 96-102 (glowing ores, remapped there by the voxelizer,
+// indices 32-38)
+bool is_emitter(uint block_id) {
+    return (32u <= block_id && block_id < 64u)
+        || (96u <= block_id && block_id < 103u);
+}
 
 bool is_translucent(uint block_id) { return 64u <= block_id && block_id < 80u; }
 
 vec3 get_emitted_light(uint block_id) {
     if (is_emitter(block_id)) {
-        return texelFetch(light_data_sampler, ivec2(int(block_id) - 32, 0), 0)
-            .rgb;
+        int lut_index = int(block_id) - (block_id < 96u ? 32 : 64);
+        return texelFetch(light_data_sampler, ivec2(lut_index, 0), 0).rgb;
     } else {
         return vec3(0.0);
     }

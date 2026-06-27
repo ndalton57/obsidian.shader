@@ -4,6 +4,7 @@ profile.low                            = §eBasso
 profile.medium                         = §aMedio
 profile.high                           = §bAlto
 profile.ultra                          = §dUltra
+profile.nasa                           = §cNASA
 
 # Screens
 
@@ -14,31 +15,11 @@ screen.fog                             = Nebbia
 screen.materials                       = Materiali
 screen.water                           = Acqua
 screen.post                            = Post-Elaborazione
-screen.misc                            = Varie
 
-screen.weather                         = Meteo 
-screen.colored_lights                  = Impostazioni Luci Colorate
 screen.rp_settings                     = Impostazioni Resource Pack
-screen.reflections                     = Riflessi
-screen.refraction                      = Rifrazione
-screen.light_sources                   = Fonti di luce
-screen.shadows                         = Ombre
-screen.ao                              = Occlusione ambientale
-screen.color_grading                   = Gradiente di Colore
-screen.exposure                        = Esposizione
-screen.lpv_vl                          = Dispersione Luci Colorate Nebbia
-screen.box                             = Box di selezione
 
 screen.aurora                          = Aurora
-screen.clouds                          = Nuvole
-screen.crepuscular_rays                = Raggi Crepuscolari
 screen.stars                           = Stelle
-screen.clouds_cumulus                  = Impostazioni Nuvole Cumulus
-screen.clouds_altocumulus              = Impostazioni Nuvole Altocumulus
-screen.clouds_cumulus_congestus        = Impostazioni Nuvole Cumulus Congestus
-screen.clouds_cirrus                   = Impostazioni Nuvole Cirrus/Cirrocumulus
-screen.clouds_minecrafty               = Impostazioni Nuvole vanilla
-screen.clouds_noctilucent              = Impostazioni Nuvole Nottilucenti
 
 screen.fog_rlh                         = Nebbia Rayleigh
 screen.fog_mie                         = Nebbia Mie
@@ -58,19 +39,17 @@ screen.fog_rlh_taiga                   = Colore Taiga
 screen.fog_rlh_jungle                  = Colore Giungla
 screen.fog_rlh_swamp                   = Colore Palude
 screen.water_waves                     = Onde
-screen.water_fog_coeff                 = Coefficente sott'acqua
 
 screen.end_light_color                 = Colore Luci
 screen.end_ambient_color               = Colore Ambiente
-screen.nether_color                    = Colore Statico
 
-screen.distance_view                   = Distanza Visiva
 
 option.INFO                            = Tachyon Shader
 value.INFO.0                           = §eby nullptr
 value.INFO.1                           = §aby nullptr
 value.INFO.2                           = §bby nullptr
 value.INFO.3                           = §dby nullptr
+value.INFO.4                           = §cby nullptr
 
 # World settings
 
@@ -90,12 +69,8 @@ option.EDGE_HIGHLIGHT                  = Bordi Evidenziati
 option.EDGE_HIGHLIGHT.comment          = Effetti Bordi Evidenziati ispirato a Minecraft Dungeons
 option.EDGE_HIGHLIGHT_SCALE            = Scala Bordi Evidenziati
 option.EDGE_HIGHLIGHT_SCALE.comment    = Controlla lo spessore dei Bordi Evidenziati; Cambia questa opzione per risolvere problemi con la Resource Pack
-option.MOON_PHASE_AFFECTS_BRIGHTNESS   = Fasi della luna cambiano la luce
-option.MOON_PHASE_AFFECTS_BRIGHTNESS.comment = La luminosità della notte dipende dalle fasi della Luna
 option.DESERT_SANDSTORM                = Tempeste di Sabbia
 option.DESERT_SANDSTORM.comment        = Tempeste di Sabbbia quando piove in un bioma deserto
-option.END_GLOW                        = End Luminoso
-option.END_GLOW.comment                = Effetto luminoso ondeggiante nell'End. Richiede Luci Volumetriche
 
 # Weather
 option.RANDOM_WEATHER_VARIATION            = Variazione Random
@@ -262,72 +237,14 @@ option.GALAXY                          = Galassia
 option.GALAXY.comment                  = Galassia nel cielo notturno
 option.GALAXY_INTENSITY                = Intensità Galassia
 option.GALAXY_INTENSITY.comment        = Controlla la luminosità della galassia nel cielo notturno
-option.CREPUSCULAR_RAYS                = Attivato
-option.CREPUSCULAR_RAYS_INTENSITY      = Intensità
-option.CREPUSCULAR_RAYS_STEPS_HORIZON  = Numero Passaggi - Orizzonte
-option.CREPUSCULAR_RAYS_STEPS_ZENITH   = Numero Passaggi - Zenit
 option.LIGHTNING_FLASH                 = Lampi
 option.RAINBOWS                        = Arcobaleno
-option.END_SUN_EFFECT                  = Effetto Sole End
 
 # Clouds
-option.CLOUDS_CUMULUS                       = Nuvole Cumulus
-option.CLOUDS_CUMULUS.comment               = Nuvole volumetrice di bassa altitudine fatte per assomigliare ai Cumuli
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_H       = Passaggi Primari - Orizzonte
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_Z       = Passaggi Primari - Zenit
-option.CLOUDS_CUMULUS_LIGHTING_STEPS        = Passaggi di Luce
-option.CLOUDS_CUMULUS_AMBIENT_STEPS         = Passaggi d'Ambiente
-option.CLOUDS_CUMULUS_ALTITUDE              = Altitudine
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_THICKNESS             = Spessore
-option.CLOUDS_CUMULUS_DENSITY               = Densità
-option.CLOUDS_CUMULUS_COVERAGE              = Copertura
-option.CLOUDS_CUMULUS_SIZE                  = Dimensione
-option.CLOUDS_CUMULUS_DETAIL_STRENGTH       = Scala Dettagli
-option.CLOUDS_CUMULUS_WIND_SPEED            = Velocità Vento
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m/s
-option.CLOUDS_CUMULUS_WIND_ANGLE            = Angolo Vento
-suffix.CLOUDS_CUMULUS_ALTITUDE              = °
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE = Copertura Locale Precompilata
 comment.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE = Ottimizzazione aggressiva per i cumuli. Riduce la distanza massima in cui le nuvole possono generarsi e può creare artefatti quando la camera si muove. Disabilità per fare foto alle nuvole da sopra
 
-option.CLOUDS_ALTOCUMULUS                       = Nuvole Altocumulus
-option.CLOUDS_ALTOCUMULUS.comment               = Nuvole volumetriche di media altitudine fatte per assomigliare a nuvole altocumulus
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_H       = Passaggi Primari - Horizon
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_Z       = Passaggi Primari - Zenith
-option.CLOUDS_ALTOCUMULUS_LIGHTING_STEPS        = Passaggi di Luce
-option.CLOUDS_ALTOCUMULUS_AMBIENT_STEPS         = Passaggi d'Ambiente
-option.CLOUDS_ALTOCUMULUS_ALTITUDE              = Altitudine
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m
-option.CLOUDS_ALTOCUMULUS_THICKNESS             = Spessore
-option.CLOUDS_ALTOCUMULUS_DENSITY               = Densità
-option.CLOUDS_ALTOCUMULUS_COVERAGE              = Copertura
-option.CLOUDS_ALTOCUMULUS_SIZE                  = Dimensione
-option.CLOUDS_ALTOCUMULUS_DETAIL_STRENGTH       = Scala Dettagli
-option.CLOUDS_ALTOCUMULUS_WIND_SPEED            = Velocità Vento
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m/s
-option.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = Angolo Vento
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = °
 
-option.CLOUDS_CUMULUS_CONGESTUS                       = Nuvole Cumulus Congestus
-option.CLOUDS_CUMULUS_CONGESTUS.comment               = Enormi, distanti nuvole volumetriche
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_H       = Passaggi Primari - Orizzonte
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_Z       = Passaggi Primari - Zenit
-option.CLOUDS_CUMULUS_CONGESTUS_LIGHTING_STEPS        = Passaggi di Luce
-option.CLOUDS_CUMULUS_CONGESTUS_AMBIENT_STEPS         = Passaggi d'Ambiente
-option.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = Altitudine
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_CONGESTUS_THICKNESS             = Spessore
-option.CLOUDS_CUMULUS_CONGESTUS_DENSITY               = Densità
-option.CLOUDS_CUMULUS_CONGESTUS_COVERAGE              = Copertura
-option.CLOUDS_CUMULUS_CONGESTUS_SIZE                  = Dimensioni
-option.CLOUDS_CUMULUS_CONGESTUS_DETAIL_STRENGTH       = Scala Dettagli
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = Velocità Vento
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m/s
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = Angolo Vento
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = °
 
-option.CLOUDS_NOCTILUCENT              = Nuvole Nottilucenti
 
 option.BLOCKY_CLOUDS                   = Nuvole Vanilla
 option.BLOCKY_CLOUDS.comment           = Nuvole Volumetriche con stile Vanilla. attivando questa opzione disattiva tutte le altre nuvole
@@ -336,7 +253,6 @@ option.BLOCKY_CLOUDS_LAYER_2.comment   = Un secondo strato di nuvole volumetrich
 option.BLOCKY_CLOUDS_THICKNESS         = Spessore
 option.BLOCKY_CLOUDS_THICKNESS.comment = Modifica lo spessore delle nuvole vanilla
 option.BLOCKY_CLOUDS_ALTITUDE          = Altitudine
-option.BLOCKY_CLOUDS_ALTITUTE.comment  = Modifica l'altitudine delle nuvole
 option.BLOCKY_CLOUDS_ALTITUDE_2        = Secondo Strato Altitudine
 option.BLOCKY_CLOUDS_ALTITUDE_2.comment = Modifica L'altitudine del secondo strato
 option.BLOCKY_CLOUDS_ROUNDNESS         = Rotondità
@@ -354,37 +270,13 @@ value.CLOUDS_TEMPORAL_UPSCALING.2      = 4×
 value.CLOUDS_TEMPORAL_UPSCALING.3      = 9×
 value.CLOUDS_TEMPORAL_UPSCALING.4      = 16×
 
-option.CLOUDS_CIRRUS                       = Nuvole Cirrus/Cirrocumulus
-option.CLOUDS_CIRRUS.comment               = Nuvole cirrus e cirrocumulus
-option.CLOUDS_CIRRUS_LIGHTING_STEPS        = Passaggi di Luce
-option.CLOUDS_CIRRUS_AMBIENT_STEPS         = Passaggi d'Ambiente
-option.CLOUDS_CIRRUS_ALTITUDE              = Altitudine
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m
-option.CLOUDS_CIRRUS_THICKNESS             = Spessore
-option.CLOUDS_CIRRUS_DENSITY               = Densità Cirrus
-option.CLOUDS_CIRRUS_COVERAGE              = Copertura Cirrus 
-option.CLOUDS_CIRRUS_SIZE                  = Dimensione Cirrus
-option.CLOUDS_CIRRUS_DETAIL_STRENGTH       = Scala Dettaglio Cirrus 
-option.CLOUDS_CIRRUS_CURL_STRENGTH         = Scala Arricciamento Cirrus
-option.CLOUDS_CIRRUS_WIND_SPEED            = Velocità Vento
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m/s
-option.CLOUDS_CIRRUS_WIND_ANGLE            = Angolo Vento
-suffix.CLOUDS_CIRRUS_ALTITUDE              = °
-option.CLOUDS_CIRROCUMULUS_DENSITY         = Densità Cirrocumulus
-option.CLOUDS_CIRROCUMULUS_COVERAGE        = Copertura Cirrocumulus
-option.CLOUDS_CIRROCUMULUS_SIZE            = Dimensione Cirrocumulus
-option.CLOUDS_CIRROCUMULUS_DETAIL_STRENGTH = Scala Dettaglio Cirrocumulus 
-option.CLOUDS_CIRROCUMULUS_CURL_STRENGTH   = Scala Arricciamento Cirrocumulus
 
-option.CLOUDS_NOCTILUCENT_INTENSITY    = Intensità
-option.CLOUDS_NOCTILUCENT_RARITY       = Rarità
 
 option.AURORA_NORMAL                   = Aurora in qualsiasi bioma
 option.AURORA_SNOW                     = Aurora in biomi nevosi
 option.AURORA_BRIGHTNESS               = Luminosità Aurora
 option.AURORA_FREQUENCY                = Frequenza Aurora
 option.AURORA_CLOUD_LIGHTING           = Contribuzione Luce Nuvole
-option.AURORA_GROUND_LIGHTING          = Contribuzione Luce Terreno
 
 value.AURORA_NORMAL.AURORA_NEVER       = Mai
 value.AURORA_NORMAL.AURORA_RARELY      = Raramente
@@ -412,8 +304,6 @@ option.VL.comment                      = Aggiunge raggi di luce e variabile nebb
 option.VL_RENDER_SCALE                 = Scala Render VL
 option.AIR_FOG_CLOUDY_NOISE            = Foschia nuvolosa
 option.AIR_FOG_CLOUDY_NOISE.comment    = Foschia a bassa quota, meglio visibile la mattina.\nRichiede Nebbia Volumetrica!
-option.AIR_FOG_COLORosso_LIGHT_SHAFTS    = Raggi di Luce Colorati
-option.AIR_FOG_COLORosso_LIGHT_SHAFTS.comment = Raggi di luce che passano oggetti trasparenti colorati per poi colorarsi a loro volta
 
 # LPV VL
 option.LPV_VL                          = Attivato
@@ -489,7 +379,7 @@ option.SPECULAR_MAPPING                = Mappatura Speculare
 option.SPECULAR_MAPPING.comment        = Per usare le mappature speculari dalla resource pack. Attiva questo se stai usando "PBR" resource pack
 option.POM                             = Mappatura Occlusione di Parallasse
 option.TEXTURE_FORMAT                  = Formato Texture
-option.TEXTURE_FORMAT.comment          = Formato texture usato dalle resource pack. Le resource pack più moderne usano lab_p_b_r, mentre pack che dovevano funzionare con SEUS usano OldPBR.
+option.TEXTURE_FORMAT.comment          = Formato texture usato dalle resource pack. Le resource pack più moderne usano lab_p_b_r, mentre le più vecchie usano OldPBR.
 option.HARDCODED_SPECULAR              = Hardcoded Speculare
 option.HARDCODED_SPECULAR.comment      = Hardcoded Riflessi speculari per alcuni blocchi (es metalli)
 option.HARDCODED_EMISSION              = Hardcoded Emissione
@@ -685,7 +575,7 @@ option.TONEMAP_COMPARISON.comment      = Confronta due funzioni di Tonemapping n
 option.tonemap_left                    = Tonemap sinistro
 option.tonemap_right                   = Tonemap destro
 option.FANCY_NETHER_PORTAL             = Portale Nether stiloso
-option.FANCY_NETHER_PORTAL.comment     = Effetto portale del Nether "Fancy" ispirato dalla shader Complementary Reimagined di EminGT, Ringrazio Emin per il permesso di usare la sua idea! potrebbe non funzionare in alcuni resource packs
+option.FANCY_NETHER_PORTAL.comment     = Effetto portale del Nether "Fancy" con strati in parallasse; potrebbe non funzionare in alcuni resource packs
 option.CUSTOM_SKY                      = Cielo personalizzato (Custom)
 option.CUSTOM_SKY.comment              = Attiva il cielo personalizzato delle resource packs
 option.CUSTOM_SKY_BRIGHTNESS           = Luminosità Cielo Custom

@@ -1,10 +1,10 @@
 /*p0_cl
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/p0_clouds_prep:
-  Create cloud cumulus coverage map and cloud shadow map
+  Create the cloud shadow map from the volumetric cloud field
 
 --------------------------------------------------------------------------------
 */
@@ -22,14 +22,14 @@ flat in vec3 moon_dir_fixed;
 flat in vec3 light_dir_fixed;
 #endif
 
-#include "/include/sky/clouds/parameters.glsl"
-flat in CloudsParameters clouds_params;
-
 // ------------
 //   Uniforms
 // ------------
 
 uniform sampler2D noisetex;
+
+uniform sampler2D cloud_noisetex; // cloud shape noise (customTexture)
+#define CLOUD_NOISETEX cloud_noisetex
 
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
@@ -48,6 +48,7 @@ uniform float near;
 uniform float far;
 
 uniform int worldTime;
+uniform int worldDay;
 uniform int moonPhase;
 uniform float sunAngle;
 
@@ -68,6 +69,7 @@ uniform vec2 view_pixel_size;
 uniform vec2 taa_offset;
 
 uniform float world_age;
+uniform float cloud_time;
 uniform float eye_skylight;
 
 uniform float time_sunrise;
@@ -88,9 +90,11 @@ const vec3 sky_color = vec3(0.0);
 #define light_dir light_dir_fixed
 #endif
 
+// Only the density/shadow half of the cloud field is needed here
+#define CLOUDS_SHADOW_FUNCTIONS_ONLY
+
 #include "/include/lighting/cloud_shadows.glsl"
 #include "/include/misc/lod_mod_support.glsl"
-#include "/include/sky/clouds/coverage_map.glsl"
 
 void main() {
     // Cloud shadow map
@@ -101,11 +105,5 @@ void main() {
 #else
     fragment_color.xy = vec2(1.0);
 #endif
-#endif
-
-    // Cumulus coverage map
-
-#ifdef CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE
-    fragment_color.z = render_clouds_cumulus_coverage_map(uv);
 #endif
 }

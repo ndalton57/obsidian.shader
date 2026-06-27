@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  GLSL Debug Text Renderer by SixthSurge (updated 2023-04-08)
+  GLSL Debug Text Renderer
 
   Character set based on Monocraft by IdreesInc
   https://github.com/IdreesInc/Monocraft

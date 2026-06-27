@@ -170,6 +170,13 @@ void update_voxel_map(uint block_id) {
     block_id = block_id * (1u - is_warped_stem) + 46 * is_warped_stem;
     block_id = block_id * (1u - is_crimson_stem) + 58 * is_crimson_stem;
 
+#ifdef GLOWING_ORE
+    // Glowing ores double as dim colored-light emitters: remap blocks
+    // 86-92 into the second emitter ID range (96-102 -> light_color 32-38)
+    uint is_glowing_ore = uint(86u <= block_id && block_id < 93u);
+    block_id = block_id * (1u - is_glowing_ore) + (block_id + 10u) * is_glowing_ore;
+#endif
+
     // SSS blocks
     if (
         block_id == 5u || // Leaves

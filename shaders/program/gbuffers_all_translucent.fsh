@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/gbuffers_all_translucent:
   Handle translucent terrain, translucent entities (Iris), translucent handheld
@@ -293,8 +293,8 @@ vec4 water_absorption_approx(
     );
 }
 
-// Parallax nether portal effect inspired by Complementary Reimagined Shaders by
-// EminGT Thanks to Emin for letting me use his idea!
+// Parallax nether portal effect: layered portal texture samples offset along
+// the view direction for a depth illusion
 
 vec2 get_uv_from_local_coord(vec2 local_coord) {
     return atlas_tile_offset + atlas_tile_scale * fract(local_coord);

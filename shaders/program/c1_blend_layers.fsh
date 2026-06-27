@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/c1_blend_layers
   Combine:
@@ -16,6 +16,13 @@
 */
 
 #include "/include/global.glsl"
+
+// The End: Voxy's state there is unreliable (zero-size viewport logs;
+// displaced depth/projection reconstruction) — blend without LoD depth
+// handling in this world, matching c0_vl. See the note in c0_vl.fsh.
+#if defined WORLD_END && defined LOD_MOD_ACTIVE
+#undef LOD_MOD_ACTIVE
+#endif
 
 layout(location = 0) out vec3 fragment_color;
 
@@ -204,6 +211,60 @@ vec4 smooth_filter(sampler2D sampler, vec2 coord) {
     return texture(sampler, coord);
 }
 
+#if defined WORLD_NETHER
+// Bilateral upscale: the fog buffers are
+// read back as a depth-weighted AVERAGE of 5 half-res texels (center + the
+// four diagonal neighbours) instead of one bilinear tap. The nether plume
+// field is noisy per march sample by construction — the 5-tap average is
+// the spatial filter that field needs; a plain bilinear
+// read shows the raw variance as per-pixel speckle. The depth weights stop
+// the average from bleeding fog across geometry silhouettes.
+void bilateral_upscale_fog(
+    float reference_view_z,
+    out vec3 fog_transmittance,
+    out vec3 fog_scattering
+) {
+    const ivec2 taps[5] = ivec2[](
+        ivec2(-1, -1),
+        ivec2(1, 1),
+        ivec2(-1, 1),
+        ivec2(1, -1),
+        ivec2(0, 0)
+    );
+
+    ivec2 fog_size = textureSize(colortex6, 0);
+    ivec2 fog_texel = ivec2(uv * vec2(fog_size));
+
+    vec3 sum_transmittance = vec3(0.0);
+    vec3 sum_scattering = vec3(0.0);
+    float sum_weight = 0.0;
+
+    for (int i = 0; i < 5; ++i) {
+        ivec2 tap = clamp(fog_texel + taps[i], ivec2(0), fog_size - 1);
+
+        // depth of the full-res pixel this fog texel was marched for — the
+        // same fog-texel-to-view-texel mapping c0 uses when writing it
+        ivec2 tap_view_texel = ivec2(
+            (vec2(tap) + 0.5) * taau_render_scale * rcp(VL_RENDER_SCALE)
+        );
+        float tap_view_z = screen_to_view_space_depth(
+            gbufferProjectionInverse,
+            texelFetch(depthtex0, tap_view_texel, 0).x
+        );
+
+        float weight
+            = abs(tap_view_z - reference_view_z) < 0.01 * far ? 1.0 : 1e-5;
+
+        sum_transmittance += texelFetch(colortex6, tap, 0).rgb * weight;
+        sum_scattering += texelFetch(colortex7, tap, 0).rgb * weight;
+        sum_weight += weight;
+    }
+
+    fog_transmittance = sum_transmittance / sum_weight;
+    fog_scattering = sum_scattering / sum_weight;
+}
+#endif
+
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
 
@@ -216,8 +277,18 @@ void main() {
     vec4 translucent_color = texelFetch(colortex13, texel, 0);
 
 #if defined VL || defined LPV_VL
+#if defined WORLD_NETHER
+    vec3 fog_transmittance;
+    vec3 fog_scattering;
+    bilateral_upscale_fog(
+        screen_to_view_space_depth(gbufferProjectionInverse, front_depth),
+        fog_transmittance,
+        fog_scattering
+    );
+#else
     vec3 fog_transmittance = smooth_filter(colortex6, uv).rgb;
     vec3 fog_scattering = smooth_filter(colortex7, uv).rgb;
+#endif
 #endif
 
     // LoD mod support
@@ -517,14 +588,18 @@ void main() {
     // applied to terrain REGARDLESS of VL and not capped to the air-fog volume,
     // so distant terrain gets bluish depth even high up (the normal fog tops out
     // at Y320). Sky pixels and density 0 are no-ops inside air_haze_analytic.
-#if defined WORLD_OVERWORLD
+#if defined WORLD_OVERWORLD && defined ATMOSPHERIC_HAZE
     if (isEyeInWater != 1) {
         mat2x3 haze = air_haze_analytic(
             cameraPosition,
             front_position_world,
             is_sky,
             eye_skylight,
-            1.0
+            1.0,
+            // Night density: thicken the haze as the sun sets (smooth dusk ramp,
+            // tied to sun height so there is no hard shift). Day stays at 1.0.
+            mix(1.0, ATMOSPHERIC_HAZE_NIGHT_DENSITY,
+                1.0 - smoothstep(-0.25, 0.0, sun_dir.y))
         );
         fragment_color = fragment_color * haze[1] + haze[0];
     }

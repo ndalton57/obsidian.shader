@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d2_clouds_upscaling:
   Temporal upscaling for clouds
@@ -133,28 +133,6 @@ float texture_min_4x4(sampler2D s, vec2 coord) {
 }
 
 vec3 reproject_clouds(vec2 uv, float distance_to_cloud) {
-    const float planet_radius = 6371e3;
-    const float clouds_cumulus_radius = planet_radius + CLOUDS_CUMULUS_ALTITUDE;
-    const float clouds_altocumulus_radius
-        = planet_radius + CLOUDS_ALTOCUMULUS_ALTITUDE;
-    const float clouds_cirrus_radius = planet_radius + CLOUDS_CIRRUS_ALTITUDE;
-    const float clouds_cumulus_wind_angle = CLOUDS_CUMULUS_WIND_ANGLE * degree;
-    const float clouds_altocumulus_wind_angle
-        = CLOUDS_ALTOCUMULUS_WIND_ANGLE * degree;
-    const float clouds_cirrus_wind_angle = CLOUDS_CIRRUS_WIND_ANGLE * degree;
-    const vec3 clouds_cumulus_velocity = CLOUDS_CUMULUS_WIND_SPEED
-        * vec3(cos(clouds_cumulus_wind_angle),
-               0.0,
-               sin(clouds_cumulus_wind_angle));
-    const vec3 clouds_altocumulus_velocity = CLOUDS_ALTOCUMULUS_WIND_SPEED
-        * vec3(cos(clouds_altocumulus_wind_angle),
-               0.0,
-               sin(clouds_altocumulus_wind_angle));
-    const vec3 clouds_cirrus_velocity = CLOUDS_CIRRUS_WIND_SPEED
-        * vec3(cos(clouds_cirrus_wind_angle),
-               0.0,
-               sin(clouds_cirrus_wind_angle));
-
     vec3 view_pos = screen_to_view_space(vec3(uv, 1.0), false, false);
     vec3 scene_pos = view_to_scene_space(view_pos);
     vec3 world_dir = normalize(scene_pos - gbufferModelViewInverse[3].xyz);
@@ -162,27 +140,25 @@ vec3 reproject_clouds(vec2 uv, float distance_to_cloud) {
     vec3 cloud_pos
         = world_dir * distance_to_cloud + gbufferModelViewInverse[3].xyz;
 
-    // Work out which layer this cloud belongs to
-    vec3 velocity;
-    vec3 air_cloud_pos
-        = vec3(
-              0.0,
-              CLOUDS_SCALE * (eyeAltitude - SEA_LEVEL) + planet_radius,
-              0.0
-          )
-        + CLOUDS_SCALE * cloud_pos;
-    float r = length(air_cloud_pos);
+    // Work out which cloud layer this cloud belongs to and compensate for the
+    // scroll of its dominant shape field (see cloud_movement in
+    // include/sky/clouds/field.glsl: cloud_movement advances by
+    // 20/24 * Cloud_Speed per second; the cumulus layers sample world/4 so
+    // their patterns move 4x that, layer 1 scrolls doubled along -z, and the
+    // altostratus plane samples world coordinates directly)
+    float cloud_y = cloud_pos.y + eyeAltitude;
+    float movement_rate = (20.0 / 24.0) * Cloud_Speed;
 
-    if (r < clouds_altocumulus_radius) {
-        velocity = clouds_cumulus_velocity;
-    } else if (r < clouds_cirrus_radius) {
-        velocity = clouds_altocumulus_velocity;
+    vec3 velocity;
+    if (cloud_y < CloudLayer1_height) {
+        velocity = vec3(-4.0, 0.0, 0.0) * movement_rate; // large cumulus
+    } else if (cloud_y < CloudLayer2_height) {
+        velocity = vec3(0.0, 0.0, -8.0) * movement_rate; // small cumulus
     } else {
-        velocity = clouds_cirrus_velocity;
+        velocity = vec3(-1.0, 0.0, 0.0) * movement_rate; // altostratus
     }
 
-    cloud_pos += velocity * frameTime * rcp(CLOUDS_SCALE)
-        * float(daylight_cycle_enabled);
+    cloud_pos += velocity * frameTime * float(daylight_cycle_enabled);
 
     return reproject_scene_space(cloud_pos, false, false);
 }
@@ -363,7 +339,12 @@ void main() {
     apparent_distance_history
         = disocclusion ? apparent_distance : apparent_distance_history;
 
-    // Checkerboard upscaling
+#if CLOUDS_TEMPORAL_UPSCALING != 2
+    // Checkerboard upscaling: only the sub-position rendered this frame
+    // receives fresh data; the rest carry reprojected history. In the
+    // half-res-every-frame mode every texel is fresh each frame, so all
+    // pixels blend the current sample and this pass acts as a plain
+    // temporal average.
     ivec2 offset_0 = dst_texel % CLOUDS_TEMPORAL_UPSCALING;
     ivec2 offset_1
         = clouds_checkerboard_offsets[frameCounter % checkerboard_area];
@@ -372,12 +353,20 @@ void main() {
         apparent_distance = min(apparent_distance, apparent_distance_history);
         ambient_scattering = history_data.z;
     }
+#endif
 
     float pixel_age = max0(history_data.y) * float(!disocclusion);
     float history_weight = 1.0 - rcp(max(pixel_age - checkerboard_area, 1.0));
 
-#ifndef TAAU
-    // Offcenter rejection
+#if !defined TAAU && CLOUDS_TEMPORAL_UPSCALING != 2
+    // Offcenter rejection: down-weights history that reprojects between texel
+    // centers so resampling error can't accumulate in the long-lived
+    // checkerboard history. Only for the checkerboard modes: in the
+    // half-res-every-frame mode fresh data corrects the history every frame
+    // (error is bounded by the averaging horizon, so no such term is
+    // needed), while the weight crush during camera motion re-exposes
+    // raw per-sample march noise — worst on the low cumulus layer, whose
+    // steep sun self-shadow lighting has the highest per-sample variance.
     vec2 pixel_center_offset
         = 1.0 - abs(fract(previous_uv * view_res) * 2.0 - 1.0);
     float offcenter_rejection

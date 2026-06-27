@@ -4,6 +4,7 @@ profile.low                            = §e低
 profile.medium                         = §a中
 profile.high                           = §b高
 profile.ultra                          = §d极致
+profile.nasa                           = §cNASA
 
 # Screens
 
@@ -14,34 +15,13 @@ screen.fog                             = 雾气
 screen.materials                       = 材质
 screen.water                           = 水
 screen.post                            = 后处理
-screen.misc                            = 杂项
 
-screen.weather                         = 天气变化
-screen.colored_lights                  = 彩色光源设置
 screen.rp_settings                     = 资源包设置
-screen.reflections                     = 反射
-screen.refraction                      = 折射
-screen.light_sources                   = 光源
-screen.shadows                         = 阴影
-screen.ao                              = 环境光遮蔽
-screen.color_grading                   = 颜色分级
-screen.exposure                        = 曝光
-screen.lpv_vl                          = 彩色光源雾气散射
-screen.box                             = 选择框
-screen.developer                       = 开发者选项
 
 screen.distant_horizons                = Distant Horizons
 
 screen.aurora                          = 极光
-screen.clouds                          = 云层
-screen.crepuscular_rays                = 云隙光
 screen.stars                           = 星星
-screen.clouds_cumulus                  = 积云设置
-screen.clouds_altocumulus              = 高积云设置
-screen.clouds_cumulus_congestus        = 浓积云设置
-screen.clouds_cirrus                   = 卷云/卷积云设置
-screen.clouds_minecrafty               = 方块云层设置
-screen.clouds_noctilucent              = 夜光云设置
 
 screen.fog_rlh                         = 瑞利系数
 screen.fog_mie                         = 米氏系数
@@ -61,19 +41,17 @@ screen.fog_rlh_taiga                   = 针叶林群系 雾气颜色
 screen.fog_rlh_jungle                  = 丛林群系 雾气颜色
 screen.fog_rlh_swamp                   = 沼泽群系 雾气颜色
 screen.water_waves                     = 水波
-screen.water_fog_coeff                 = 水雾系数
 
 screen.end_light_color                 = 末地光照颜色
 screen.end_ambient_color               = 末地环境光颜色
-screen.nether_color                    = 下界基础颜色
 
-screen.distance_view                   = 距离视图
 
 option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §e作者: nullptr
 value.INFO.1                           = §a作者: nullptr
 value.INFO.2                           = §b作者: nullptr
 value.INFO.3                           = §d作者: nullptr
+value.INFO.4                           = §c作者: nullptr
 
 # World settings
 
@@ -93,12 +71,8 @@ option.EDGE_HIGHLIGHT                  = 边缘高亮
 option.EDGE_HIGHLIGHT.comment          = 受《我的世界地下城》启发的方块边缘高亮效果.
 option.EDGE_HIGHLIGHT_SCALE            = 边缘高亮尺寸
 option.EDGE_HIGHLIGHT_SCALE.comment    = 控制边缘高亮的宽度尺寸, 请根据所用资源包的分辨率来进行匹配调节.
-option.MOON_PHASE_AFFECTS_BRIGHTNESS   = 月相影响照明
-option.MOON_PHASE_AFFECTS_BRIGHTNESS.comment = 夜晚时间段的亮度受月相变化影响.
 option.DESERT_SANDSTORM                = 沙漠群系沙尘暴
 option.DESERT_SANDSTORM.comment        = 沙漠群系在雨天时候刮起的沙尘暴.
-option.END_GLOW                        = 末地辉光雾
-option.END_GLOW.comment                = 在末地维度摇曳的辉光效果. 需要启用体积雾.
 
 # Weather
 option.RANDOM_WEATHER_VARIATION            = 随机变化
@@ -267,72 +241,13 @@ option.GALAXY                          = 星系
 option.GALAXY.comment                  = 夜空中的星系图像.
 option.GALAXY_INTENSITY                = 星系强度
 option.GALAXY_INTENSITY.comment        = 控制夜空中星系的亮度.
-option.CREPUSCULAR_RAYS                = 云隙光
-option.CREPUSCULAR_RAYS_INTENSITY      = 云隙光强度
-option.CREPUSCULAR_RAYS_STEPS_HORIZON  = 基础采样数 - 地平线
-option.CREPUSCULAR_RAYS_STEPS_ZENITH   = 基础采样数 - 天顶
 option.LIGHTNING_FLASH                 = 闪电闪光
 option.RAINBOWS                        = 彩虹
-option.END_SUN_EFFECT                  = 末地日轮
 
 # Clouds
-option.CLOUDS_CUMULUS                       = 积云
-option.CLOUDS_CUMULUS.comment               = 近似于积云的低层体积云.
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_H       = 基础采样数 - 地平线
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_Z       = 基础采样数 - 天顶
-option.CLOUDS_CUMULUS_LIGHTING_STEPS        = 照明采样数
-option.CLOUDS_CUMULUS_AMBIENT_STEPS         = 环境光采样数
-option.CLOUDS_CUMULUS_ALTITUDE              = 高度
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_THICKNESS             = 厚度
-option.CLOUDS_CUMULUS_DENSITY               = 浓度
-option.CLOUDS_CUMULUS_COVERAGE              = 覆盖率
-option.CLOUDS_CUMULUS_SIZE                  = 尺寸
-option.CLOUDS_CUMULUS_DETAIL_STRENGTH       = 细节强度
-option.CLOUDS_CUMULUS_WIND_SPEED            = 风速
-suffix.CLOUDS_CUMULUS_WIND_SPEED            = m/s
-option.CLOUDS_CUMULUS_WIND_ANGLE            = 风向角
-suffix.CLOUDS_CUMULUS_WIND_ANGLE            = °
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE = 预计算局部覆盖率
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE.comment = 对积云进行激进优化. 减少云可以绘制的最大距离, 并且当镜头移动时云层形状会发生变化, 因而产生更多伪影. 如果想在云层之上拍截图的需求, 请禁用本选项.
 
-option.CLOUDS_ALTOCUMULUS                       = 高积云
-option.CLOUDS_ALTOCUMULUS.comment               = 近似于高积云的中层体积云.
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_H       = 基础采样数 - 地平线
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_Z       = 基础采样数 - 天顶
-option.CLOUDS_ALTOCUMULUS_LIGHTING_STEPS        = 照明采样数
-option.CLOUDS_ALTOCUMULUS_AMBIENT_STEPS         = 环境光采样数
-option.CLOUDS_ALTOCUMULUS_ALTITUDE              = 高度
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m
-option.CLOUDS_ALTOCUMULUS_THICKNESS             = 厚度
-option.CLOUDS_ALTOCUMULUS_DENSITY               = 浓度
-option.CLOUDS_ALTOCUMULUS_COVERAGE              = 覆盖率
-option.CLOUDS_ALTOCUMULUS_SIZE                  = 尺寸
-option.CLOUDS_ALTOCUMULUS_DETAIL_STRENGTH       = 细节强度
-option.CLOUDS_ALTOCUMULUS_WIND_SPEED            = 风速
-suffix.CLOUDS_ALTOCUMULUS_WIND_SPEED            = m/s
-option.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = 风向角
-suffix.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = °
 
-option.CLOUDS_CUMULUS_CONGESTUS                       = 浓积云
-option.CLOUDS_CUMULUS_CONGESTUS.comment               = 巨大而遥远的体积云.
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_H       = 初步采样数 - 地平线
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_Z       = 初步采样数 - 天顶
-option.CLOUDS_CUMULUS_CONGESTUS_LIGHTING_STEPS        = 照明采样数
-option.CLOUDS_CUMULUS_CONGESTUS_AMBIENT_STEPS         = 环境光采样数
-option.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = 高度
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_CONGESTUS_THICKNESS             = 厚度
-option.CLOUDS_CUMULUS_CONGESTUS_DENSITY               = 浓度
-option.CLOUDS_CUMULUS_CONGESTUS_COVERAGE              = 覆盖率
-option.CLOUDS_CUMULUS_CONGESTUS_SIZE                  = 尺寸
-option.CLOUDS_CUMULUS_CONGESTUS_DETAIL_STRENGTH       = 细节强度
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = 风速
-suffix.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = m/s
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = 风向角
-suffix.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = °
 
-option.CLOUDS_NOCTILUCENT              = 夜光云
 
 option.BLOCKY_CLOUDS                   = 方块云层
 option.BLOCKY_CLOUDS.comment           = 原版风格体积云层. 启用本选项会禁用其他所有类型的云层.
@@ -359,37 +274,13 @@ value.CLOUDS_TEMPORAL_UPSCALING.2      = 4×
 value.CLOUDS_TEMPORAL_UPSCALING.3      = 9×
 value.CLOUDS_TEMPORAL_UPSCALING.4      = 16×
 
-option.CLOUDS_CIRRUS                       = 卷云/卷积云
-option.CLOUDS_CIRRUS.comment               = 平面卷云和卷积云.
-option.CLOUDS_CIRRUS_LIGHTING_STEPS        = 照明采样数
-option.CLOUDS_CIRRUS_AMBIENT_STEPS         = 环境光采样数
-option.CLOUDS_CIRRUS_ALTITUDE              = 高度
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m
-option.CLOUDS_CIRRUS_THICKNESS             = 厚度
-option.CLOUDS_CIRRUS_DENSITY               = 卷云强度
-option.CLOUDS_CIRRUS_COVERAGE              = 卷云覆盖率
-option.CLOUDS_CIRRUS_SIZE                  = 卷云尺寸
-option.CLOUDS_CIRRUS_DETAIL_STRENGTH       = 卷云细节强度
-option.CLOUDS_CIRRUS_CURL_STRENGTH         = 卷云卷曲强度
-option.CLOUDS_CIRRUS_WIND_SPEED            = 风速
-suffix.CLOUDS_CIRRUS_WIND_SPEED            = m/s
-option.CLOUDS_CIRRUS_WIND_ANGLE            = 风向角
-suffix.CLOUDS_CIRRUS_WIND_ANGLE            = °
-option.CLOUDS_CIRROCUMULUS_DENSITY         = 卷积云强度
-option.CLOUDS_CIRROCUMULUS_COVERAGE        = 卷积云覆盖率
-option.CLOUDS_CIRROCUMULUS_SIZE            = 卷积云尺寸
-option.CLOUDS_CIRROCUMULUS_DETAIL_STRENGTH = 卷积云细节强度
-option.CLOUDS_CIRROCUMULUS_CURL_STRENGTH   = 卷积云卷曲强度
 
-option.CLOUDS_NOCTILUCENT_INTENSITY    = 夜光云强度
-option.CLOUDS_NOCTILUCENT_RARITY       = 稀有度
 
 option.AURORA_NORMAL                   = 全群系极光
 option.AURORA_SNOW                     = 积雪群系极光
 option.AURORA_BRIGHTNESS               = 极光亮度
 option.AURORA_FREQUENCY                = 极光频率
 option.AURORA_CLOUD_LIGHTING           = 云层照明贡献率
-option.AURORA_GROUND_LIGHTING          = 地表照明贡献率
 
 value.AURORA_NORMAL.AURORA_NEVER       = 关闭
 value.AURORA_NORMAL.AURORA_RARELY      = 小概率
@@ -490,7 +381,7 @@ option.SPECULAR_MAPPING                = 高光贴图
 option.SPECULAR_MAPPING.comment        = 决定是否使用由资源包提供的高光贴图. 请在使用 “PBR” 资源包时启用本选项.
 option.POM                             = 视差贴图
 option.TEXTURE_FORMAT                  = 资源包格式
-option.TEXTURE_FORMAT.comment          = 资源包所用的纹理格式. 大多数现代资源包使用 labPBR 格式, 但仍有部分包是专门为 SEUS 设计而使用的 OldPBR 格式.
+option.TEXTURE_FORMAT.comment          = 资源包所用的纹理格式. 大多数现代资源包使用 labPBR 格式, 但仍有部分较旧的包使用 OldPBR 格式.
 option.HARDCODED_SPECULAR              = 硬编码 高光
 option.HARDCODED_SPECULAR.comment      = 为某些方块硬编码高光反射(例如金属).
 option.HARDCODED_EMISSION              = 硬编码 发光
@@ -686,7 +577,7 @@ option.TONEMAP_COMPARISON.comment      = 用于比较屏幕左半部分和右半
 option.tonemap_left                    = 左侧色调
 option.tonemap_right                   = 右侧色调
 option.FANCY_NETHER_PORTAL             = 绚丽的地狱门
-option.FANCY_NETHER_PORTAL.comment     = 受 Emin 开发的 Complementary Reimagined 地狱门效果启发的炫酷地狱门效果, 感谢 Emin 允许我使用他的创意! 可能和某些资源包不兼容.
+option.FANCY_NETHER_PORTAL.comment     = 多层视差效果的炫酷地狱门, 可能和某些资源包不兼容.
 option.CUSTOM_SKY                      = 自定义天空
 option.CUSTOM_SKY.comment              = 启用对资源包自定义天空的支持.
 option.CUSTOM_SKY_BRIGHTNESS           = 自定义天空亮度

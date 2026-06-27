@@ -4,6 +4,7 @@ profile.low                            = §eLaag
 profile.medium                         = §aGemiddeld
 profile.high                           = §bHoog
 profile.ultra                          = §dUltiem
+profile.nasa                           = §cNASA
 
 # Screens
 
@@ -14,33 +15,12 @@ screen.fog                             = Mist
 screen.materials                       = Materialen
 screen.water                           = Water
 screen.post                            = Filters & Effecten
-screen.misc                            = Overig
 
-screen.weather                         = Weer
-screen.colored_lights                  = Gekleurde Lichten
 screen.rp_settings                     = Bronpakket-instellingen
-screen.reflections                     = Reflecties
-screen.refraction                      = Refracties
-screen.light_sources                   = Lichtbronnen
-screen.shadows                         = Schaduwen
-screen.ao                              = Omgevingsocclusie (AO)
-screen.color_grading                   = Kleur-instellingen
-screen.exposure                        = Belichting
-screen.lpv_vl                          = Gekleurde Lichten Mist-verstrooing
-screen.box                             = Selectievak
 screen.distant_horizons                = Distant Horizons
-screen.developer                       = Ontwikkelaars-opties
 
 screen.aurora                          = Aurora
-screen.wolken                          = Wolken
-screen.crepuscular_rays                = Schemerstralen
 screen.stars                           = Sterren
-screen.clouds_cumulus                  = Cumulus Instellingen
-screen.clouds_altocumulus              = Altocumulus Instellingen
-screen.clouds_cumulus_congestus        = Cumulus Congestus Instellingen
-screen.clouds_cirrus                   = Cirrus/Cirrocumulus Instellingen
-screen.clouds_minecrafty               = Blokkerige Wolken Instellingen
-screen.clouds_noctilucent              = Noctilucent Instellingen
 
 screen.fog_rlh                         = Rayleigh Mist
 screen.fog_mie                         = Mie Mist
@@ -60,19 +40,17 @@ screen.fog_rlh_taiga                   = Taiga Kleur
 screen.fog_rlh_jungle                  = Jungle Kleur
 screen.fog_rlh_swamp                   = Moeras Kleur
 screen.water_waves                     = Water Golven
-screen.water_fog_coeff                 = Water Mist Coëfficiënten
 
 screen.end_light_color                 = Lichtkleur
 screen.end_ambient_color               = Omgevingskleur
-screen.nether_color                    = Statische Kleur
 
-screen.distance_view                   = Afstandsweergave
 
 option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §edoor nullptr
 value.INFO.1                           = §adoor nullptr
 value.INFO.2                           = §bdoor nullptr
 value.INFO.3                           = §ddoor nullptr
+value.INFO.4                           = §cdoor nullptr
 
 # World settings
 
@@ -92,12 +70,8 @@ option.EDGE_HIGHLIGHT                  = Lichte Blokranden
 option.EDGE_HIGHLIGHT.comment          = Een lichte rand op blokken, geïnspireerd door Minecraft Dungeons.
 option.EDGE_HIGHLIGHT_SCALE            = Lichte Blokrand-grootte
 option.EDGE_HIGHLIGHT_SCALE.comment    = De dikte van de lichte blokranden. Dit werkt het beste als het hetzelfde als de resolutie van het geactiveerde bronpakket is.
-option.MOON_PHASE_AFFECTS_BRIGHTNESS   = Maanfase Wijzigt Belichting
-option.MOON_PHASE_AFFECTS_BRIGHTNESS.comment = Maanfase verandert de belichting tijdens nachten.
 option.DESERT_SANDSTORM                = Dor/Woestijn Zandstorm
 option.DESERT_SANDSTORM.comment        = Vervangt de droge woestijn tijdens regen met een zandstorm.
-option.END_GLOW                        = End Gloei
-option.END_GLOW.comment                = Gloeiend effect in De End. Vereist Volumetrische Mist.
 
 # Weather
 option.RANDOM_WEATHER_VARIATION            = Willekeurige Variatie
@@ -269,73 +243,13 @@ option.GALAXY                          = Sterrenstelsel
 option.GALAXY.comment                  = Sterrenstelsel-afbeelding in de nachtlucht.
 option.GALAXY_INTENSITY                = Sterrenstelsel Intensiteit
 option.GALAXY_INTENSITY.comment        = Wijzigt de felheid van het sterrenstelsel.
-option.CREPUSCULAR_RAYS                = Schemerstralen
-option.CREPUSCULAR_RAYS.comment        = Schemerstralen vanuit de lucht.
-option.CREPUSCULAR_RAYS_INTENSITY      = Intensiteit
-option.CREPUSCULAR_RAYS_STEPS_HORIZON  = Stappen - Horizon
-option.CREPUSCULAR_RAYS_STEPS_ZENITH   = Stappen - Zenit
 option.LIGHTNING_FLASH                 = Bliksemflits
 option.RAINBOWS                        = Regenbogen
-option.END_SUN_EFFECT                  = End Zon Effect
 
 # Clouds
-option.CLOUDS_CUMULUS                       = Cumulus Wolken
-option.CLOUDS_CUMULUS.comment               = Laaghangende volumetrische wolken die cumulus-wolken moeten voorstellen.
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_H       = Primaire Stappen - Horizon
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_Z       = Primaire Stappen - Zenit
-option.CLOUDS_CUMULUS_LIGHTING_STEPS        = Licht Stappen
-option.CLOUDS_CUMULUS_AMBIENT_STEPS         = Omgevings Stappen
-option.CLOUDS_CUMULUS_ALTITUDE              = Hoogte
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_THICKNESS             = Dikte
-option.CLOUDS_CUMULUS_DENSITY               = Dichtheid
-option.CLOUDS_CUMULUS_COVERAGE              = Dekking
-option.CLOUDS_CUMULUS_SIZE                  = Grootte
-option.CLOUDS_CUMULUS_DETAIL_STRENGTH       = Detail Intensiteit
-option.CLOUDS_CUMULUS_WIND_SPEED            = Windsnelheid
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m/s
-option.CLOUDS_CUMULUS_WIND_ANGLE            = Windrichting
-suffix.CLOUDS_CUMULUS_ALTITUDE              = °
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE         = Bereken Dekking Van Tevoren
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE.comment = Optimalisatie voor cumulus-wolken. Limiteert de maximale afstand van wolken en kan artefacten met morphende wolkvormen wanneer de camera beweegt. Zet dit uit wanneer je een schermopname boven de wolken maakt.
 
-option.CLOUDS_ALTOCUMULUS                       = Altocumulus Wolken
-option.CLOUDS_ALTOCUMULUS.comment               = Volumetrische wolken op gemiddelde hoogte die altocumulus-wolken moeten voorstellen.
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_H       = Primaire Stappen - Horizon
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_Z       = Primaire Stappen - Zenit
-option.CLOUDS_ALTOCUMULUS_LIGHTING_STEPS        = Licht Stappen
-option.CLOUDS_ALTOCUMULUS_AMBIENT_STEPS         = Omgevings Stappen
-option.CLOUDS_ALTOCUMULUS_ALTITUDE              = Hoogte
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m
-option.CLOUDS_ALTOCUMULUS_THICKNESS             = Dikte
-option.CLOUDS_ALTOCUMULUS_DENSITY               = Dichtheid
-option.CLOUDS_ALTOCUMULUS_COVERAGE              = Dekking
-option.CLOUDS_ALTOCUMULUS_SIZE                  = Grootte
-option.CLOUDS_ALTOCUMULUS_DETAIL_STRENGTH       = Detail Intensiteit
-option.CLOUDS_ALTOCUMULUS_WIND_SPEED            = Windsnelheid
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m/s
-option.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = Windrichting
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = °
 
-option.CLOUDS_CUMULUS_CONGESTUS                       = Cumulus Congestus Wolken
-option.CLOUDS_CUMULUS_CONGESTUS.comment               = Gigantische en verre volumetrische wolken. Deze verdwijnen wanneer je dichtbij komt.
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_H       = Primaire Stappen - Horizon
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_Z       = Primaire Stappen - Zenit
-option.CLOUDS_CUMULUS_CONGESTUS_LIGHTING_STEPS        = Licht Stappen
-option.CLOUDS_CUMULUS_CONGESTUS_AMBIENT_STEPS         = Omgevings Stappen
-option.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = Hoogte
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_CONGESTUS_THICKNESS             = Dikte
-option.CLOUDS_CUMULUS_CONGESTUS_DENSITY               = Dichtheid
-option.CLOUDS_CUMULUS_CONGESTUS_COVERAGE              = Dekking
-option.CLOUDS_CUMULUS_CONGESTUS_SIZE                  = Grootte
-option.CLOUDS_CUMULUS_CONGESTUS_DETAIL_STRENGTH       = Detail Intensiteit
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = Windsnelheid
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m/s
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = Windrichting
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = °
 
-option.CLOUDS_NOCTILUCENT              = Noctilucent Wolken
 
 option.BLOCKY_CLOUDS                   = Blokkerige Wolken
 option.BLOCKY_CLOUDS.comment           = Vanilla-achtige volumetrische wolken. Schakelt alle andere wolktypen uit.
@@ -363,37 +277,13 @@ value.CLOUDS_TEMPORAL_UPSCALING.2      = 4×
 value.CLOUDS_TEMPORAL_UPSCALING.3      = 9×
 value.CLOUDS_TEMPORAL_UPSCALING.4      = 16×
 
-option.CLOUDS_CIRRUS                       = Cirrus/Cirrocumulus Wolken
-option.CLOUDS_CIRRUS.comment               = Vlakke cirrus and cirrocumulus wolken
-option.CLOUDS_CIRRUS_LIGHTING_STEPS        = Licht Stappen
-option.CLOUDS_CIRRUS_AMBIENT_STEPS         = Omgevings Stappen
-option.CLOUDS_CIRRUS_ALTITUDE              = Hoogte
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m
-option.CLOUDS_CIRRUS_THICKNESS             = Dikte
-option.CLOUDS_CIRRUS_DENSITY               = Cirrus Dichtheid
-option.CLOUDS_CIRRUS_COVERAGE              = Cirrus Dekking
-option.CLOUDS_CIRRUS_SIZE                  = Cirrus Grootte
-option.CLOUDS_CIRRUS_DETAIL_STRENGTH       = Cirrus Detail Intensiteit
-option.CLOUDS_CIRRUS_CURL_STRENGTH         = Cirrus Krul Intensiteit
-option.CLOUDS_CIRRUS_WIND_SPEED            = Windsnelheid
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m/s
-option.CLOUDS_CIRRUS_WIND_ANGLE            = Windrichting
-suffix.CLOUDS_CIRRUS_ALTITUDE              = °
-option.CLOUDS_CIRROCUMULUS_DENSITY         = Cirrocumulus Dichtheid
-option.CLOUDS_CIRROCUMULUS_COVERAGE        = Cirrocumulus Dekking
-option.CLOUDS_CIRROCUMULUS_SIZE            = Cirrocumulus Grootte
-option.CLOUDS_CIRROCUMULUS_DETAIL_STRENGTH = Cirrocumulus Detail Intensiteit
-option.CLOUDS_CIRROCUMULUS_CURL_STRENGTH   = Cirrocumulus Krul Intensiteit
 
-option.CLOUDS_NOCTILUCENT_INTENSITY    = Intensiteit
-option.CLOUDS_NOCTILUCENT_RARITY       = Zeldzaamheid
 
 option.AURORA_NORMAL                   = Aurora In Elk Bioom
 option.AURORA_SNOW                     = Aurora In Sneeuwerige Biomen
 option.AURORA_BRIGHTNESS               = Aurora Felheid
 option.AURORA_FREQUENCY                = Aurora Frequentie
 option.AURORA_CLOUD_LIGHTING           = Wolkbelichting
-option.AURORA_GROUND_LIGHTING          = Grondbelichting
 
 value.AURORA_NORMAL.AURORA_NEVER       = Nooit
 value.AURORA_NORMAL.AURORA_RARELY      = Zelden
@@ -693,7 +583,7 @@ option.TONEMAP_COMPARISON.comment      = Vergelijk twee Tonemaps, eentje links e
 option.tonemap_left                    = Linker Tonemap
 option.tonemap_right                   = Rechter Tonemap
 option.FANCY_NETHER_PORTAL             = Fraai Nether Portaal
-option.FANCY_NETHER_PORTAL.comment     = Fraai nether portaal gebaseerd op het effect van Complementary Shaders. Hartelijk dank aan Emin voor toestemming om dit effect te gebruiken.
+option.FANCY_NETHER_PORTAL.comment     = Fraai nether portaal effect met parallax lagen. Werkt mogelijk niet goed met sommige resource packs.
 option.CUSTOM_SKY                      = Aangepaste Lucht
 option.CUSTOM_SKY.comment              = Zet de aangepaste lucht van het bronpakket aan.
 option.CUSTOM_SKY_BRIGHTNESS           = Aangepaste Lucht Felheid

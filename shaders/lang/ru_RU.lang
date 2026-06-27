@@ -4,6 +4,7 @@ profile.low                            = §eНизкие
 profile.medium                         = §aСредние
 profile.high                           = §bВысокие
 profile.ultra                          = §dУльтра
+profile.nasa                           = §cNASA
 
 # Screens
 
@@ -14,33 +15,12 @@ screen.fog                             = Туман
 screen.materials                       = Материалы
 screen.water                           = Вода
 screen.post                            = Пост-обработка
-screen.misc                            = Разное
 
-screen.weather                         = Система ежедневной погоды
-screen.colored_lights                  = Настройки цветного освещения
 screen.rp_settings                     = Настройки ресурс-пака
-screen.reflections                     = Отражения
-screen.refraction                      = Преломления
-screen.light_sources                   = Источники света
-screen.shadows                         = Тени
-screen.ao                              = Окружающая окклюзия
-screen.color_grading                   = Цветовая гамма
-screen.exposure                        = Экспозиция
-screen.lpv_vl                          = Освещение тумана цветным светом
-screen.box                             = Контур блоков
 screen.distant_horizons                = Distant Horizons
-screen.developer                       = Настройки разработчика
 
 screen.aurora                          = Северное сияние
-screen.clouds                          = Облака
-screen.crepuscular_rays                = Сумеречные лучи
 screen.stars                           = Звезды
-screen.clouds_cumulus                  = Настройки кучевых облаков
-screen.clouds_altocumulus              = Настройки высококучевых облаков
-screen.clouds_cumulus_congestus        = Настройки мощнокучевых облаков
-screen.clouds_cirrus                   = Настройки перистых облаков
-screen.clouds_minecrafty               = Настройки квадратных облаков
-screen.clouds_noctilucent              = Настройки серебристых облаков
 
 screen.fog_rlh                         = Коэффициент Рэлея
 screen.fog_mie                         = Коэффициент Ми
@@ -60,19 +40,17 @@ screen.fog_rlh_taiga                   = Цвет тайги
 screen.fog_rlh_jungle                  = Джунглевый цвет
 screen.fog_rlh_swamp                   = Болотный цвет
 screen.water_waves                     = Волны
-screen.water_fog_coeff                 = Коэффициенты водяного тумана
 
 screen.end_light_color                 = Цвет света
 screen.end_ambient_color               = Цвет окружения
-screen.nether_color                    = Статичный цвет
 
-screen.distance_view                   = Дальность обзора
 
 option.INFO                            = Tachyon Shaders
 value.INFO.0                           = §eсделано nullptr
 value.INFO.1                           = §aсделано nullptr
 value.INFO.2                           = §bсделано nullptr
 value.INFO.3                           = §dсделано nullptr
+value.INFO.4                           = §cсделано nullptr
 
 # World settings
 
@@ -92,12 +70,8 @@ option.EDGE_HIGHLIGHT                  = Выделение краев
 option.EDGE_HIGHLIGHT.comment          = Эффект выделения краев, вдохновленный Minecraft Dungeons
 option.EDGE_HIGHLIGHT_SCALE            = Размер выделения краев
 option.EDGE_HIGHLIGHT_SCALE.comment    = Управляет толщиной выделения краев; измените это значение в соответствии с разрешением вашего пакета ресурсов
-option.MOON_PHASE_AFFECTS_BRIGHTNESS   = Фаза луны влияет на яркость
-option.MOON_PHASE_AFFECTS_BRIGHTNESS.comment = Ночная яркость зависит от фазы Луны
 option.DESERT_SANDSTORM                = Песчаная буря в пустыне
 option.DESERT_SANDSTORM.comment        = Песчаная буря во время дождя в пустынном биоме
-option.END_GLOW                        = Свечение в крае
-option.END_GLOW.comment                = Колеблющийся эффект свечения в Крае. Необходимо включённое объемное освещение.
 # Weather
 option.RANDOM_WEATHER_VARIATION            = Случайная
 option.BIOME_WEATHER_VARIATION             = На основе биомов
@@ -265,72 +239,13 @@ option.GALAXY                          = Галактика
 option.GALAXY.comment                  = Изображение галактики в ночном небе
 option.GALAXY_INTENSITY                = Интенсивность галактики
 option.GALAXY_INTENSITY.comment        = Управляет яркостью галактики в ночном небе
-option.CREPUSCULAR_RAYS                = Включены
-option.CREPUSCULAR_RAYS_INTENSITY      = Интенсивность
-option.CREPUSCULAR_RAYS_STEPS_HORIZON  = Шагов — Горизонт
-option.CREPUSCULAR_RAYS_STEPS_ZENITH   = Шагов — Зенит
 option.LIGHTNING_FLASH                 = Вспышка молнии
 option.RAINBOWS                        = Радуги
-option.END_SUN_EFFECT                  = Эффект заходящего солнца
 
 # Clouds
-option.CLOUDS_CUMULUS                       = Кучевые облака
-option.CLOUDS_CUMULUS.comment               = Объемные облака на низкой высоте, напоминающие кучевые облака
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_H       = Основные шаги - Горизонт
-option.CLOUDS_CUMULUS_PRIMARY_STEPS_Z       = Основные шаги - Зенит
-option.CLOUDS_CUMULUS_LIGHTING_STEPS        = Шагов освещения
-option.CLOUDS_CUMULUS_AMBIENT_STEPS         = Шагов окружающего освещения
-option.CLOUDS_CUMULUS_ALTITUDE              = Высота
-suffix.CLOUDS_CUMULUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_THICKNESS             = Толщина
-option.CLOUDS_CUMULUS_DENSITY               = Плотность
-option.CLOUDS_CUMULUS_COVERAGE              = Покрытие
-option.CLOUDS_CUMULUS_SIZE                  = Размер
-option.CLOUDS_CUMULUS_DETAIL_STRENGTH       = Количество деталей
-option.CLOUDS_CUMULUS_WIND_SPEED            = Сила ветра
-suffix.CLOUDS_CUMULUS_WIND_SPEED            = m/s
-option.CLOUDS_CUMULUS_WIND_ANGLE            = Направление ветра
-suffix.CLOUDS_CUMULUS_WIND_ANGLE            = °
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE         = Предварительный расчёт локального покрытия
-option.CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE.comment = Агрессивная оптимизация для кучевых облаков. Уменьшает максимальную дальность отрисовки облаков и может вызывать артефакты в виде искажений формы облаков при движении камеры. Отключите для скриншотов над облаками.
 
-option.CLOUDS_ALTOCUMULUS                       = Высококучевые облака
-option.CLOUDS_ALTOCUMULUS.comment               = Объемные облака на средней высоте, напоминающие кучевые облака
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_H       = Основные шаги - Горизонт
-option.CLOUDS_ALTOCUMULUS_PRIMARY_STEPS_Z       = Основные шаги - Зенит
-option.CLOUDS_ALTOCUMULUS_LIGHTING_STEPS        = Шагов освещения
-option.CLOUDS_ALTOCUMULUS_AMBIENT_STEPS         = Шагов окружающего освещения
-option.CLOUDS_ALTOCUMULUS_ALTITUDE              = Высота
-suffix.CLOUDS_ALTOCUMULUS_ALTITUDE              = m
-option.CLOUDS_ALTOCUMULUS_THICKNESS             = Толщина
-option.CLOUDS_ALTOCUMULUS_DENSITY               = Плотность
-option.CLOUDS_ALTOCUMULUS_COVERAGE              = Покрытие
-option.CLOUDS_ALTOCUMULUS_SIZE                  = Размер
-option.CLOUDS_ALTOCUMULUS_DETAIL_STRENGTH       = Количество деталей
-option.CLOUDS_ALTOCUMULUS_WIND_SPEED            = Сила ветра
-suffix.CLOUDS_ALTOCUMULUS_WIND_SPEED            = m/s
-option.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = Направление ветра
-suffix.CLOUDS_ALTOCUMULUS_WIND_ANGLE            = °
 
-option.CLOUDS_CUMULUS_CONGESTUS                       = Мощнокучевые облака
-option.CLOUDS_CUMULUS_CONGESTUS.comment               = Массивные, далекие объемные облака
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_H       = Основные шаги - Горизонт
-option.CLOUDS_CUMULUS_CONGESTUS_PRIMARY_STEPS_Z       = Основные шаги - Зенит
-option.CLOUDS_CUMULUS_CONGESTUS_LIGHTING_STEPS        = Шагов освещения
-option.CLOUDS_CUMULUS_CONGESTUS_AMBIENT_STEPS         = Шагов окружающего освещения
-option.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = Высота
-suffix.CLOUDS_CUMULUS_CONGESTUS_ALTITUDE              = m
-option.CLOUDS_CUMULUS_CONGESTUS_THICKNESS             = Толщина
-option.CLOUDS_CUMULUS_CONGESTUS_DENSITY               = Плотность
-option.CLOUDS_CUMULUS_CONGESTUS_COVERAGE              = Покрытие
-option.CLOUDS_CUMULUS_CONGESTUS_SIZE                  = Размер
-option.CLOUDS_CUMULUS_CONGESTUS_DETAIL_STRENGTH       = Количество деталей
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = Сила ветра
-suffix.CLOUDS_CUMULUS_CONGESTUS_WIND_SPEED            = m/s
-option.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = Направление ветра
-suffix.CLOUDS_CUMULUS_CONGESTUS_WIND_ANGLE            = °
 
-option.CLOUDS_NOCTILUCENT              = Серебристые облака
 
 option.BLOCKY_CLOUDS                   = Квадратные облака
 option.BLOCKY_CLOUDS.comment           = Объемные облака в ванильном стиле. Включение этой опции отключает все другие типы облаков
@@ -373,37 +288,13 @@ value.CLOUDS_TEMPORAL_UPSCALING.2      = 4×
 value.CLOUDS_TEMPORAL_UPSCALING.3      = 9×
 value.CLOUDS_TEMPORAL_UPSCALING.4      = 16×
 
-option.CLOUDS_CIRRUS                       = Перистые облака
-option.CLOUDS_CIRRUS.comment               = Плоские перистые облака
-option.CLOUDS_CIRRUS_LIGHTING_STEPS        = Шагов освещения
-option.CLOUDS_CIRRUS_AMBIENT_STEPS         = Шагов окружающего освещения
-option.CLOUDS_CIRRUS_ALTITUDE              = Высота
-suffix.CLOUDS_CIRRUS_ALTITUDE              = m
-option.CLOUDS_CIRRUS_THICKNESS             = Толщина
-option.CLOUDS_CIRRUS_DENSITY               = Плотность
-option.CLOUDS_CIRRUS_COVERAGE              = Покрытие
-option.CLOUDS_CIRRUS_SIZE                  = Размер
-option.CLOUDS_CIRRUS_DETAIL_STRENGTH       = Количество деталей
-option.CLOUDS_CIRRUS_CURL_STRENGTH         = Сила шума
-option.CLOUDS_CIRRUS_WIND_SPEED            = Сила ветра
-suffix.CLOUDS_CIRRUS_WIND_SPEED            = m/s
-option.CLOUDS_CIRRUS_WIND_ANGLE            = Направление ветра
-suffix.CLOUDS_CIRRUS_WIND_ANGLE            = °
-option.CLOUDS_CIRROCUMULUS_DENSITY         = Плотность перисто-кучевых облаков
-option.CLOUDS_CIRROCUMULUS_COVERAGE        = Покрытие перисто-кучевых облаков
-option.CLOUDS_CIRROCUMULUS_SIZE            = Размер перисто-кучевых облаков
-option.CLOUDS_CIRROCUMULUS_DETAIL_STRENGTH = Детализация перисто-кучевых облаков
-option.CLOUDS_CIRROCUMULUS_CURL_STRENGTH   = Степень завитков перисто-кучевых облаков
 
-option.CLOUDS_NOCTILUCENT_INTENSITY    = Интенсивность
-option.CLOUDS_NOCTILUCENT_RARITY       = Редкость
 
 option.AURORA_NORMAL                   = Сияние в любом биоме
 option.AURORA_SNOW                     = Сияние в снежном биоме
 option.AURORA_BRIGHTNESS               = Яркость сияния
 option.AURORA_FREQUENCY                = Частота сияний
 option.AURORA_CLOUD_LIGHTING           = Вклад облачного света
-option.AURORA_GROUND_LIGHTING          = Вклад наземного освещения
 
 value.AURORA_NORMAL.AURORA_NEVER       = Никогда
 value.AURORA_NORMAL.AURORA_RARELY      = Редко
@@ -504,7 +395,7 @@ option.SPECULAR_MAPPING                = Отображение отражени
 option.SPECULAR_MAPPING.comment        = Следует ли использовать зеркальные карты, предоставляемые пакетом ресурсов. Включите это, если вы используете "PBR" ресурс-пак
 option.POM                             = Отображение параллаксной окклюзии
 option.TEXTURE_FORMAT                  = Формат текстур
-option.TEXTURE_FORMAT.comment          = Формат текстуры, используемый пакетом ресурсов. Большинство современных пакетов ресурсов используют lab_p_b_r, в то время как пакеты, предназначенные для работы с SEUS, могут использовать OldPBR
+option.TEXTURE_FORMAT.comment          = Формат текстуры, используемый пакетом ресурсов. Большинство современных пакетов ресурсов используют lab_p_b_r, более старые пакеты могут использовать OldPBR
 option.HARDCODED_SPECULAR              = Зеркальные отражения
 option.HARDCODED_SPECULAR.comment      = Жестко запрограммированные зеркальные отражения для некоторых блоков (например, металлов)
 option.HARDCODED_EMISSION              = Свечение
@@ -700,7 +591,7 @@ option.TONEMAP_COMPARISON.comment      = Сравните две функции 
 option.tonemap_left                    = Левая тональная карта
 option.tonemap_right                   = Правая тональная карта
 option.FANCY_NETHER_PORTAL             = Необычный портал в Нижний мир
-option.FANCY_NETHER_PORTAL.comment     = Необычный эффект портала в Нижний мир, вдохновленный шейдерами Complementary Reimagined от EminGT, спасибо Эмину за то, что он позволил мне использовать его идею! Возможно, с некоторыми пакетами ресурсов это работает не так хорошо
+option.FANCY_NETHER_PORTAL.comment     = Многослойный параллакс-эффект портала в Нижний мир. Возможно, с некоторыми пакетами ресурсов это работает не так хорошо
 option.CUSTOM_SKY                      = Пользовательское небо
 option.CUSTOM_SKY.comment              = Включить пользовательское небо из ресурс-паком
 option.CUSTOM_SKY_BRIGHTNESS           = Яркость пользовательского неба

@@ -1,10 +1,10 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   world0/prepare.vsh:
-  Create cloud base coverage map and cloud shadow map
+  Create the cloud shadow map from the volumetric cloud field
 
 --------------------------------------------------------------------------------
 */
@@ -12,9 +12,6 @@
 #include "/include/global.glsl"
 
 out vec2 uv;
-
-#include "/include/sky/clouds/parameters.glsl"
-flat out CloudsParameters clouds_params;
 
 #ifndef IS_IRIS
 flat out vec3 sun_dir_fixed;
@@ -64,8 +61,6 @@ uniform float biome_humidity;
 
 uniform float desert_sandstorm;
 
-#include "/include/weather/clouds.glsl"
-
 #ifndef IS_IRIS
 // `sunPosition` fix by Builderb0y
 vec3 calculate_sun_direction() {
@@ -84,9 +79,6 @@ vec3 calculate_sun_direction() {
 
 void main() {
     uv = gl_MultiTexCoord0.xy;
-
-    Weather weather = get_weather();
-    clouds_params = get_clouds_parameters(weather);
 
 #ifndef IS_IRIS
     sun_dir_fixed = calculate_sun_direction();

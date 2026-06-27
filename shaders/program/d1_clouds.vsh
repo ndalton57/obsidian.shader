@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d1_clouds:
   Render clouds and aurora
@@ -20,9 +20,6 @@ flat out vec3 sky_color;
 
 flat out float aurora_amount;
 flat out mat2x3 aurora_colors;
-
-#include "/include/sky/clouds/parameters.glsl"
-flat out CloudsParameters clouds_params;
 #endif
 
 // ------------
@@ -80,7 +77,6 @@ uniform float desert_sandstorm;
 #include "/include/lighting/colors/weather_color.glsl"
 #include "/include/sky/atmosphere.glsl"
 #include "/include/sky/aurora_colors.glsl"
-#include "/include/weather/clouds.glsl"
 #endif
 
 void main() {
@@ -107,8 +103,6 @@ void main() {
 
     aurora_amount = get_aurora_amount();
     aurora_colors = get_aurora_colors();
-
-    clouds_params = get_clouds_parameters(get_weather());
 
     sky_color += aurora_amount * AURORA_CLOUD_LIGHTING
         * mix(aurora_colors[0], aurora_colors[1], 0.25);

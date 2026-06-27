@@ -1,6 +1,7 @@
 #if !defined INCLUDE_FOG_AIR_FOG_VL
 #define INCLUDE_FOG_AIR_FOG_VL
 
+#include "/include/fog/overworld/analytic.glsl"
 #include "/include/fog/overworld/constants.glsl"
 #include "/include/lighting/cloud_shadows.glsl"
 #include "/include/lighting/shadows/distortion.glsl"
@@ -25,6 +26,10 @@ vec2 air_fog_density(vec3 world_pos) {
     // sea level otherwise)
     density *= linear_step(air_fog_volume_bottom(), air_fog_anchor(), world_pos.y);
 
+    // bedrock fog displays only while the eye is in the bottom fifth of the
+    // world (no-op for the stock air fog)
+    density *= bedrock_fog_display_factor(eyeAltitude);
+
 #ifdef AIR_FOG_CLOUDY_NOISE
     const vec3 wind = 0.0003 * vec3(1.0, 0.0, 0.7);
 
@@ -33,6 +38,17 @@ vec2 air_fog_density(vec3 world_pos) {
               .w;
 
     density.y *= 4.0 * sqr(noise);
+#endif
+
+#if !defined BEDROCK_FOG && defined RAIN_FOG
+    // Storm ground fog: a dense low blanket plus a
+    // taller haze column anchored just above sea level, present only while
+    // raining. Rides the rain mie coefficient (AIR_FOG_MIE_DENSITY_RAIN), so
+    // this shapes WHERE the storm fog sits while that slider sets how heavy
+    // rain air is overall.
+    float rain_fog_dy = max(world_pos.y - (SEA_LEVEL + 3.0), 0.0);
+    density.y += (0.5 * exp2(-0.3 * rain_fog_dy) + exp2(-0.06 * rain_fog_dy))
+        * (rainStrength * biome_may_rain * RAIN_FOG_INTENSITY);
 #endif
 
     return density * (0.5 * OVERWORLD_FOG_INTENSITY);
@@ -84,7 +100,14 @@ mat2x3 raymarch_air_fog(
     }
 
 #ifdef LOD_MOD_ACTIVE
-    float fog_end = float(lod_render_distance);
+    // The dithered march covers only the first 800 blocks: marching the full
+    // LoD distance with at most air_fog_max_step_count (25) samples means
+    // 100+ block steps whose per-pixel dither variance reads as speckle on
+    // every ray without geometry behind it (confirmed in-game). The fog does
+    // NOT stop there — the remainder of the ray is added analytically below,
+    // which is noise-free by construction, so the fog continues to the full
+    // LoD distance like it always did.
+    float fog_end = 800.0;
 #else
     float fog_end = far;
 #endif
@@ -94,7 +117,12 @@ mat2x3 raymarch_air_fog(
     }
 
     ray_length = sky ? distance_to_volume_end : ray_length;
-    ray_length = clamp(ray_length - distance_to_volume_start, 0.0, fog_end);
+    float ray_length_uncapped = max(ray_length - distance_to_volume_start, 0.0);
+#ifdef LOD_MOD_ACTIVE
+    ray_length_uncapped
+        = min(ray_length_uncapped, float(lod_render_distance));
+#endif
+    ray_length = min(ray_length_uncapped, fog_end);
 
     uint step_count = uint(
         float(air_fog_min_step_count) + air_fog_step_count_growth * ray_length
@@ -173,8 +201,18 @@ mat2x3 raymarch_air_fog(
 
         vec3 visible_scattering = step_transmitted_fraction * transmittance;
 
-        light_sun[0] += visible_scattering * density.x * shadow;
-        light_sun[1] += visible_scattering * density.y * shadow;
+#ifdef CLOUD_SHADOWS
+        // The cloud deck gates the fog's sun light per step:
+        // shafts fall through cloud gaps, and full storm
+        // cover blacks the shafts out
+        float cloud_shadow
+            = get_cloud_shadows(colortex8, world_pos - cameraPosition);
+#else
+        const float cloud_shadow = 1.0;
+#endif
+
+        light_sun[0] += visible_scattering * density.x * shadow * cloud_shadow;
+        light_sun[1] += visible_scattering * density.y * shadow * cloud_shadow;
         light_sky[0] += visible_scattering * density.x;
         light_sky[1] += visible_scattering * density.y;
 
@@ -245,9 +283,16 @@ mat2x3 raymarch_air_fog(
         float mie_phase = 0.7 * henyey_greenstein_phase(LoV, 0.5 * anisotropy)
             + 0.3 * henyey_greenstein_phase(LoV, -0.2 * anisotropy);
 
+#ifdef CLOUD_SHADOWS
+        // the per-step cloud shadowing already gates the sun during storms
+        // (the deck reads ~opaque), so no flat rain dimmer on the shafts
+        scattering += scatter_amount
+            * (light_sun * vec2(isotropic_phase, mie_phase)) * fog_light_color;
+#else
         scattering += scatter_amount
             * (light_sun * vec2(isotropic_phase, mie_phase)) * fog_light_color
             * (1.0 - 0.9 * rainStrength);
+#endif
 
         scatter_amount *= 0.5;
         anisotropy *= 0.7;
@@ -282,6 +327,24 @@ mat2x3 raymarch_air_fog(
     // Neutralise the transmittance hue too, so the colour of the scene seen
     // THROUGH the fog (e.g. lava) doesn't shift with time either.
     transmittance = vec3(dot(transmittance, vec3(0.2126, 0.7152, 0.0722)));
+#endif
+
+#ifdef LOD_MOD_ACTIVE
+    // Analytic continuation: the ray past the 800-block march bound gets the
+    // same fog model integrated in closed form (air_fog_analytic — the
+    // no-VL/behind-translucents path, bedrock variant included), composited
+    // behind the marched segment's transmittance. Noise-free by
+    // construction, so the fog reaches the full LoD distance with none of
+    // the long-step speckle that marching it caused.
+    if (ray_length_uncapped > ray_length + 1e-3) {
+        vec3 tail_start = world_start_pos
+            + world_dir * (distance_to_volume_start + ray_length);
+        vec3 tail_end = world_start_pos
+            + world_dir * (distance_to_volume_start + ray_length_uncapped);
+        mat2x3 tail = air_fog_analytic(tail_start, tail_end, sky, skylight, 1.0);
+        scattering += transmittance * tail[0];
+        transmittance *= tail[1];
+    }
 #endif
 
     return mat2x3(scattering, transmittance);

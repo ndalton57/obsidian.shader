@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/grass_bushiness.csh:
   Shader Grass bushiness bake. Once per voxel cell, spread the vanilla short_grass

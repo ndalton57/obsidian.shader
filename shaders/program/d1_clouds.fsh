@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader (a fork of SixthSurge's Photon Shaders)
+  Tachyon Shader
 
   program/d1_clouds:
   Render clouds and aurora
@@ -25,19 +25,14 @@ flat in vec3 sky_color;
 
 flat in float aurora_amount;
 flat in mat2x3 aurora_colors;
-
-#include "/include/sky/clouds/parameters.glsl"
-flat in CloudsParameters clouds_params;
 #endif
 
 // ------------
 //   Uniforms
 // ------------
 
-uniform sampler3D colortex6; // 3D bubbly worley noise
-#define SAMPLER_WORLEY_BUBBLY colortex6
-uniform sampler3D colortex7; // 3D swirley worley noise
-#define SAMPLER_WORLEY_SWIRLEY colortex7
+uniform sampler2D cloud_noisetex; // cloud shape noise (customTexture)
+#define CLOUD_NOISETEX cloud_noisetex
 
 uniform sampler2D colortex8; // cloud shadow map
 
@@ -61,6 +56,7 @@ uniform float near;
 uniform float far;
 
 uniform int worldTime;
+uniform int worldDay;
 uniform int moonPhase;
 uniform float sunAngle;
 
@@ -81,6 +77,7 @@ uniform vec2 view_pixel_size;
 uniform vec2 taa_offset;
 
 uniform float world_age;
+uniform float cloud_time;
 
 uniform float time_sunrise;
 uniform float time_noon;
@@ -106,18 +103,10 @@ uniform float biome_humidity;
 #define ATMOSPHERE_SCATTERING_LUT depthtex0
 #define MIE_PHASE_CLAMP
 
-#ifdef CLOUDS_CUMULUS_PRECOMPUTE_LOCAL_COVERAGE
-#define CLOUDS_USE_LOCAL_COVERAGE_MAP
-#endif
-
 #if defined WORLD_OVERWORLD
 #include "/include/sky/atmosphere.glsl"
 #include "/include/sky/aurora.glsl"
 #include "/include/sky/clouds.glsl"
-
-#if defined CREPUSCULAR_RAYS && !defined BLOCKY_CLOUDS
-#include "/include/sky/crepuscular_rays.glsl"
-#endif
 #endif
 
 #include "/include/misc/lod_mod_support.glsl"
@@ -158,8 +147,18 @@ void main() {
     clouds = vec4(0.0, 0.0, 0.0, 1.0);
 
 #if defined WORLD_OVERWORLD
+#if CLOUDS_TEMPORAL_UPSCALING == 2
+    // Half-res-every-frame mode (the same per-frame
+    // budget spent differently): every quarter-area texel re-marches each frame from the centre
+    // of its 2x2 block with a fresh dither realization — a complete,
+    // temporally stable low-res image, instead of sparse full-res samples
+    // cycled through the checkerboard. d2 then acts as a plain temporal
+    // average and nothing on screen ever waits for history to fill in.
+    ivec2 checkerboard_pos = CLOUDS_TEMPORAL_UPSCALING * texel + ivec2(1);
+#else
     ivec2 checkerboard_pos = CLOUDS_TEMPORAL_UPSCALING * texel
         + clouds_checkerboard_offsets[frameCounter % checkerboard_area];
+#endif
 
     vec2 new_uv = vec2(checkerboard_pos) / vec2(view_res)
         * rcp(float(taau_render_scale));
@@ -183,61 +182,35 @@ void main() {
     const bool is_lod = false;
 #endif
 
-    vec3 ray_origin
-        = vec3(
-              0.0,
-              CLOUDS_SCALE * (eyeAltitude - SEA_LEVEL) + planet_radius,
-              0.0
-          )
-        + CLOUDS_SCALE * gbufferModelViewInverse[3].xyz;
     vec3 ray_dir = mat3(gbufferModelViewInverse) * normalize(view_pos);
 
-    float distance_to_terrain = (depth_max == 1.0 && !is_lod)
-        ? -1.0
-        : length(view_pos) * CLOUDS_SCALE;
-
-    vec3 clear_sky = atmosphere_scattering(
-        ray_dir,
-        sun_color,
-        sun_dir,
-        moon_color,
-        moon_dir,
-        /* use_klein_nishina_phase */ false
-    );
+    // Real-world blocks; the cloud field marches in world units
+    float distance_to_terrain
+        = (depth_max == 1.0 && !is_lod) ? -1.0 : length(view_pos);
 
     float dither = texelFetch(noisetex, ivec2(checkerboard_pos & 511), 0).b;
+#if CLOUDS_TEMPORAL_UPSCALING == 2
+    // fresh realization every frame — the texel is re-marched every frame
+    dither = r1(frameCounter, dither);
+#else
     dither = r1(frameCounter / checkerboard_area, dither);
+#endif
 
 #ifndef BLOCKY_CLOUDS
     CloudsResult result = draw_clouds(
-        ray_origin,
         ray_dir,
-        clear_sky,
         distance_to_terrain,
         dither
     );
 
     clouds.xyz = result.scattering.xyz;
     clouds.w = result.transmittance;
-    clouds_data.x = result.apparent_distance * rcp(CLOUDS_SCALE);
+    clouds_data.x = result.apparent_distance;
     clouds_data.y = result.scattering.w;
 #else
     clouds = vec4(0.0, 0.0, 0.0, 1.0);
     clouds_data.x = 1e6;
     clouds_data.y = 0.0;
-#endif
-
-    // Crepuscular rays
-
-#if defined CREPUSCULAR_RAYS && !defined BLOCKY_CLOUDS
-    vec4 crepuscular_rays = draw_crepuscular_rays(
-        colortex8,
-        ray_dir,
-        distance_to_terrain > 0.0,
-        dither
-    );
-    clouds *= crepuscular_rays.w;
-    clouds.rgb += crepuscular_rays.xyz;
 #endif
 
     // Aurora

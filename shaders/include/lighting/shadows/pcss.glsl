@@ -232,8 +232,8 @@ vec3 get_filtered_shadows(
 
     vec3 bias = get_shadow_bias(scene_pos, flat_normal, NoL, skylight);
 
-    // Light leaking prevention from Complementary Reimagined, used with
-    // permission
+    // Light leaking prevention: pull the sample toward the block interior
+    // near texel edges (fades out with skylight)
     vec3 edge_factor
         = 0.1 - 0.2 * fract(scene_pos + cameraPosition + flat_normal * 0.01);
     edge_factor -= edge_factor * skylight;
