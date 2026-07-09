@@ -78,5 +78,7 @@ void main() {
     max_color = max_color * 0.5 + 0.5;
 }
 
+#ifndef TAAU
+#error "This program should be disabled if TAAU is disabled"
 #endif
 //----------------------------------------------------------------------------//

@@ -69,6 +69,15 @@ in GrassVertex {
 #endif
 } v_in[];
 
+#if defined SHADER_GRASS && defined PROGRAM_GBUFFERS_TERRAIN_SOLID \
+    && defined IRIS_FEATURE_TESSELLATION_SHADERS
+// Per-patch election result computed in the TCS (range + air-above + grower
+// election/claim, keyed on the block center) and passed through the TES.
+// Only exists when tessellation stages are attached; without the feature the
+// GS runs the election itself below.
+flat in float te_grass_elected[];
+#endif
+
 out GrassVertex {
     vec2 uv;
     vec3 scene_pos;
@@ -100,9 +109,12 @@ uniform mat4 gbufferProjection;
 uniform vec3 cameraPosition;
 uniform vec3 cameraPositionFract; // Iris: precise fractional part of camera
 uniform ivec3 cameraPositionInt;  // Iris: exact integer part of camera
+uniform vec3 relativeEyePosition; // Iris: player-head -> camera offset
 
 uniform float frameTimeCounter;
 uniform vec2 taa_offset;
+uniform float rainStrength;
+uniform float thunderStrength; // Iris: 0-1 during thunderstorms
 
 // ------------
 //   Voxel lookup (short_grass detection)
@@ -119,12 +131,11 @@ uniform usampler3D voxel_sampler;
 uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow pass)
 #elif PROCEDURAL_GEOMETRY_MODE >= 4
 // Mode 4 (Race / FCFS): a SINGLE per-block claim buffer. The first drawn face to reach the TCS this
-// frame CAS-claims its block; this GS only READS the winner, via a COHERENT imageLoad (which sees the
-// in-pass atomic write that a sampler read would miss - this is what makes a single same-frame buffer
-// correct). frameCounter drives the per-frame stamp; both terrain programs compile the
-// election, but only the SOLID program touches the image (the cutout never grows blades, so its
-// grass_claim is stubbed) - image atomics need GL_ARB_shader_image_load_store (#version 400), enabled
-// in the solid GS + TCS stubs.
+// frame CAS-claims its block; the GS receives the result as the te_grass_elected patch flag and only
+// runs the election itself in the no-tessellation fallback (where no TCS exists). frameCounter drives
+// the per-frame stamp; both terrain programs compile the election, but only the SOLID program touches
+// the image (the cutout never grows blades, so its grass_claim is stubbed) - image atomics need
+// GL_ARB_shader_image_load_store (#version 400), enabled in the solid GS + TCS stubs.
 uniform int frameCounter;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
 layout(r32ui) coherent uniform uimage3D grass_claim_img;
@@ -239,24 +250,75 @@ vec2 grass_bushiness_at(ivec3 cell) {
 //   Helpers
 // ------------
 
-float grass_hash(float p) {
-    p = fract(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return fract(p);
+// Integer-lattice value noise for everything per-blade: a hashed white-noise
+// lattice, smoothstep-interpolated. Structureless and aperiodic by
+// construction at any world distance, and continuous everywhere (no hash
+// boundaries to flicker across). noisetex lookups are NOT usable for these:
+// the texture's content carries its own visible structure, and sampling it
+// at blade scale tiles it every 1/scale blocks - the 0.75*worldpos lookup
+// wallpapered a 1.33-block rosette lattice across every field.
+vec2 grass_hash2(ivec2 c) {
+    uvec2 u = uvec2(c);
+    uint h = u.x * 0x8da6b343u ^ u.y * 0xd8163841u;
+    h = (h ^ (h >> 13)) * 0x9E3779B1u;
+    h ^= h >> 16;
+    return vec2(h & 0xFFFFu, h >> 16) * (1.0 / 65535.0);
 }
 
-// Wind (calcWave / calcMovePlants style, WAVY_SPEED = 1).
-vec3 grass_wave(vec3 pos) {
+vec2 grass_vnoise2(vec2 p) {
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    ivec2 c = ivec2(floor(p));
+    return mix(
+        mix(grass_hash2(c), grass_hash2(c + ivec2(1, 0)), f.x),
+        mix(grass_hash2(c + ivec2(0, 1)), grass_hash2(c + ivec2(1, 1)), f.x),
+        f.y
+    );
+}
+
+// Wind (calcWave / calcMovePlants style, WAVY_SPEED = 1). Weather raises the
+// wave amplitude: clear 1.0x -> rain 1.6x -> thunderstorm 2.2x. Clear-day
+// wind swells and lulls (the gust cycle); storm wind blows STEADY - the gust
+// cycle flattens toward a sustained level as rain sets in. `sky` is the
+// blade's skylight: sheltered/cave grass keeps only a tiny residual sway.
+// phase_jitter/amp_jitter are PER-BLADE offsets: without them the field is
+// purely positional and neighbouring blades sway in lockstep with it.
+vec3 grass_wave(vec3 pos, float sky, vec2 phase_jitter, float amp_jitter) {
     float pi2wt = 150.796447372 * frameTimeCounter;
-    float magnitude
+    float gust
         = abs(sin(dot(vec4(frameTimeCounter, pos), vec4(1.0, 0.005, 0.005, 0.005)))
-              * 0.5 + 0.72)
-        * 0.013;
-    vec2 wave
-        = (sin(pi2wt * vec2(0.0063, 0.0015) * 4.0 - pos.xz + pos.y * 0.05) + 0.1)
-        * magnitude;
-    return vec3(wave.x, -length(wave), wave.y) * 5.0 * GRASS_WAVY_STRENGTH;
+              * 0.5 + 0.72);
+    gust = mix(gust, 0.95, rainStrength);
+    float magnitude = gust * 0.013;
+    // Each displacement component sums two plane waves with DIFFERENT
+    // diagonal wave vectors, so the phase varies along BOTH horizontal axes.
+    // A plain -pos.x phase moves every blade at equal x in lockstep - one
+    // full-field roll when sighted along z (and -pos.z likewise along x).
+    // On top, each patch of grass takes a random phase offset from a SMOOTH
+    // low-frequency noise field (one lattice cell = 4 blocks): any sum of a
+    // few sinusoids still forms a readable traveling front, and the patch
+    // offsets shatter it - crests only exist patch-locally (like gusts),
+    // never as a field-wide band. The field is hash-lattice noise, so the
+    // phase rolls smoothly from patch to patch with no tiling to see.
+    vec2 patch_phase = tau * grass_vnoise2(pos.xz * 0.25);
+    vec2 phase_a = vec2(
+        dot(pos.xz, vec2(1.0, 0.62)),
+        dot(pos.xz, vec2(-0.48, 1.0))
+    ) - pos.y * 0.05 + patch_phase;
+    vec2 phase_b = vec2(
+        dot(pos.xz, vec2(0.31, -0.74)),
+        dot(pos.xz, vec2(0.83, 0.27))
+    ) * 2.3 + patch_phase.yx * 1.7;
+    vec2 wave = (sin(pi2wt * vec2(0.0063, 0.0015) * 4.0 - phase_a - phase_jitter)
+                 + 0.55
+                     * sin(pi2wt * vec2(0.0171, 0.0043) * 4.0 - phase_b
+                           - phase_jitter * 1.7))
+        * (magnitude / 1.55);
+    wave += 0.1 * magnitude;
+    float storm = 1.0 + 0.6 * rainStrength + 0.6 * thunderStrength;
+    float sky_gate = 0.08 + 0.92 * sky * sky;
+    return vec3(wave.x, -length(wave), wave.y) * 5.0 * GRASS_WAVY_STRENGTH
+        * storm * sky_gate * amp_jitter;
 }
 
 vec4 grass_project(vec3 scene_p) {
@@ -340,7 +402,7 @@ void emit_passthrough(bool grower) {
         // block, not just a top fringe - and the green overlay quad is left at its true depth
         // (so the depth buffer the deferred AO reads is the unbiased overlay). Only the
         // tessellated grower face needs this; keep the bias TINY - a larger value over-pushes
-        // the base at distance and itself flickers. See CLAUDE.md gotcha #12.
+        // the base at distance and itself flickers.
         vec3 ft = v_in[i].tint.rgb;
         bool greenish = ft.g > ft.r + 0.04 && ft.g > ft.b + 0.04;
         if (grower && abs(v_in[i].tbn[2].y) < 0.5 && !greenish) {
@@ -387,14 +449,12 @@ void emit_short_grass_scaled(float decal_height, float h) {
 // to build/project the vertices); `world_root` is the PRECISE world-space base
 // (used only to drive the wind, so it stays stable as the camera moves).
 void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
-                vec4 src_tint, vec2 guv, vec2 gll) {
+                vec4 src_tint, vec2 guv, vec2 gll, vec3 wind_blade) {
     for (int s = 0; s <= BLADE_SEGMENTS; ++s) {
         float tt = float(s) / float(BLADE_SEGMENTS);
         float curve = tt * tt; // bend more toward the tip
 
-        // Wind phase from the precise world position. Feeding camera-relative
-        // coords here makes the blades shimmer/flicker when the camera moves.
-        vec3 wind = grass_wave(world_root + vec3(0.0, bh * tt, 0.0)) * curve;
+        vec3 wind = wind_blade * curve;
         vec3 center = root + vec3(0.0, bh * tt, 0.0) + lean * curve + wind;
 
         // Width tapers from base to tip (GRASS_THICKNESS_FALLOFF controls it)
@@ -430,16 +490,26 @@ void main() {
 
 #ifdef SHADER_GRASS
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    // Grow grass on grass blocks in range. Range + grower election are keyed on
-    // the BLOCK center so every face agrees (must match the TCS gate exactly).
+#ifdef IRIS_FEATURE_TESSELLATION_SHADERS
+    // The TCS already ran the full election for this patch (range + air-above
+    // + grower election / FCFS claim, keyed on the block center) - its result
+    // arrives per patch through the TES. Reading it here instead of
+    // re-running the election removes ~tess-level^2 image/voxel reads per
+    // face, and the two stages agree by construction: this is the literal
+    // value that set this patch's tessellation levels. The mode-4 claim CAS
+    // runs only in the TCS.
+    make_grass = te_grass_elected[0] > 0.5;
+#else
+    // No tessellation support: no TCS ran, so elect here. Range + grower
+    // election are keyed on the BLOCK center so every face of a block agrees.
+    // The face arrives as plain triangles (one blade each - sparse grass).
     if (v_in[0].material_mask == uint(MATERIAL_GRASS_BLOCK)) {
         vec3 bc = v_in[0].block_center;
         bool in_range = dot(bc, bc) < (GRASS_RANGE * GRASS_RANGE);
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
         // Modes 2+: this face grows iff it's the chosen grower of an exposed grass
-        // block (lets grass survive Sodium culling the top face). In mode 4 (Race) this
-        // reads the FCFS claim the TCS already made - the first drawn face to reach the
-        // TCS won the block, and every other face of it backs off here.
+        // block (lets grass survive Sodium culling the top face). In mode 4 (Race)
+        // the claim CAS runs here since there is no TCS to run it.
         make_grass = in_range && grass_air_above(bc)
             && grass_is_grower(bc, v_in[0].tbn[2]);
 #else
@@ -447,6 +517,7 @@ void main() {
         make_grass = in_range && v_in[0].tbn[2].y > 0.9;
 #endif
     }
+#endif
 #else
     // Cutout grass. Material 85 is dedicated short_grass/fern -> ALWAYS grass (no colour test, so
     // savanna's yellow grass is caught too). Material 2 (flowers + mod grasses) still needs the green
@@ -524,7 +595,7 @@ void main() {
         if (grass_read_voxel(base - vec3(0.0, 0.4, 0.0))
             == uint(MATERIAL_GRASS_BLOCK)) {
             // Shrink over [0.6R, 0.8R]: full beyond 0.8R (fills space past the shader-grass range),
-            // gone by 0.6R where the full-height blades have taken over. See CLAUDE.md.
+            // gone by 0.6R where the full-height blades have taken over.
             h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8, length(base));
             if (h < 0.02) {
                 return; // fully shrunk -> hidden (full-height shader grass covers it)
@@ -660,7 +731,7 @@ void main() {
     // cameraPositionInt + precise fraction), NOT the collapsed stable_world.xz: that
     // single float wobbles ~1 ULP as the camera moves and cherry_grove_dither (a hash)
     // amplifies the wobble, flipping the pink/green pick at the biome border while moving
-    // (worse far from spawn). See CLAUDE.md (split-camera dither/hash key). Per-blade (not
+    // (worse far from spawn). Per-blade (not
     // per-block) makes a transition block sprout a MIX of pink and green blades. src_tint is the
     // grass-block top's colour - reproduced from the 4-corner buffer for BOTH top and side growers
     // (grass_top_reproduce above) - the one place a blade's colour is set.
@@ -682,7 +753,11 @@ void main() {
     float grass_vib_luma = dot(src_tint.rgb, vec3(0.2126, 0.7152, 0.0722));
     src_tint.rgb = max(mix(vec3(grass_vib_luma), src_tint.rgb, GRASS_VIBRANCY), 0.0);
 
-    // Randomness from noisetex at the world position
+    // Randomness from noisetex at the world position. This drives the REST
+    // pose (lean + height): the texture's multi-scale content gives the
+    // tufty look - hash-lattice replacements read either combed (per-block
+    // cells) or shaggy (per-texel cells). The hash noise is used only for
+    // the wind phase field, which has no rest-pose footprint.
     vec2 wxz = stable_world.xz;
     vec2 random_dir
         = 2.0 * (texture(noisetex, 0.75 * wxz).xy + texture(noisetex, 0.35 * wxz.yx).xy)
@@ -724,14 +799,20 @@ void main() {
     // reaches 0 by GRASS_RANGE, where detection culls anyway, so no visible step.
     height *= 1.0 - smoothstep(GRASS_RANGE * 0.8, GRASS_RANGE, length(clump));
 
-    // Player-proximity outward bend: grass within ~1 block of the camera xz
-    // splays away from you - it parts as you walk through, and (because the
-    // tips lean outward) it hides the edge-on billboards when you look straight
-    // down. clump is camera-relative. Applied curve-weighted in emit_blade.
-    float player_h = length(clump.xz);
-    float player_prox
-        = smoothstep(1.0, 0.15, player_h) * smoothstep(3.0, 0.5, abs(clump.y));
-    vec2 player_dir = player_h > 1e-3 ? clump.xz / player_h : vec2(0.0);
+    // Player-proximity outward bend: grass within ~1 block of the PLAYER
+    // splays away - it parts as the player walks through, and (because the
+    // tips lean outward) it hides the edge-on billboards when looking straight
+    // down. Anchored on the player model's head, NOT the camera: clump is
+    // camera-relative, and in third person the camera sits blocks away from
+    // the player. relativeEyePosition is the head->camera offset (the same
+    // convention handheld_lighting uses), so clump + relativeEyePosition
+    // measures from the head - identical to clump in first person, where the
+    // camera IS the head. Applied curve-weighted in emit_blade.
+    vec3 from_player = clump + relativeEyePosition;
+    float player_h = length(from_player.xz);
+    float player_prox = smoothstep(1.0, 0.15, player_h)
+        * smoothstep(3.0, 0.5, abs(from_player.y));
+    vec2 player_dir = player_h > 1e-3 ? from_player.xz / player_h : vec2(0.0);
     vec3 player_push
         = vec3(player_dir.x, 0.0, player_dir.y) * player_prox * 0.35;
 
@@ -765,7 +846,20 @@ void main() {
         vec3 root = clump + blade_offset;               // scene space (project)
         vec3 world_root = stable_world + blade_offset;  // precise world (wind)
 
-        emit_blade(root, world_root, bh, right, lean, src_tint, guv, gll);
+        // Wind evaluated ONCE per blade at its root, from the precise world
+        // position (camera-relative coords here shimmer when the camera
+        // moves); emit_blade's per-segment curve weight shapes the whip.
+        // Per-blade jitters keep neighbours out of lockstep with the shared
+        // field: phase from the continuous blade noise (+-1.2 rad), and
+        // amplitude riding the same noise as blade height - taller blades
+        // sway harder. gll.y (skylight) gates the wind indoors/in caves.
+        vec2 phase_jitter = (rnd - 1.0) * 0.6;
+        float amp_jitter = 0.75 + 0.5 * hgt;
+        vec3 wind_blade
+            = grass_wave(world_root, gll.y, phase_jitter, amp_jitter);
+
+        emit_blade(root, world_root, bh, right, lean, src_tint, guv, gll,
+                   wind_blade);
     }
 #endif // PROGRAM_GBUFFERS_TERRAIN_SOLID
 }

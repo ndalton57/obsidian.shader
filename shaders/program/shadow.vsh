@@ -73,11 +73,13 @@ layout(r32ui) coherent uniform uimage3D sss_face_img; // SSS leak fix: per-face 
 writeonly uniform uimage3D grass_face_img;
 #endif
 
+#ifdef SHADER_GRASS
 // Shader Grass: grass-block TOP corner tints (2x2 per block, 3D-keyed) + matching corner LIGHT
 // (block in R, sky in G) + shared grass_top atlas tile (see update_grass_tint in voxelization.glsl).
 writeonly uniform image3D grass_tint_img;
 writeonly uniform image3D grass_light_img;
 writeonly uniform image2D grass_tile_img;
+#endif
 
 uniform int renderStage;
 #endif
@@ -101,9 +103,11 @@ void main() {
 #if defined COLORED_LIGHTS && !defined PROGRAM_SHADOW_ENTITIES
     update_voxel_map(material_mask);
     update_sss_faces(material_mask);
+#ifdef SHADER_GRASS
     update_grass_tint(material_mask);
-#if defined SHADER_GRASS && PROCEDURAL_GEOMETRY_MODE == 3
+#if PROCEDURAL_GEOMETRY_MODE == 3
     update_grass_faces(material_mask);
+#endif
 #endif
 #endif
 
@@ -145,7 +149,7 @@ void main() {
     // (they aren't replaced). No grass-block-below test: the voxel buffer is cleared + refilled in
     // THIS pass so it can't be read reliably, so short grass on bare dirt also loses its near shadow
     // - a minor accepted trade. The collapse only moves the SHADOW geometry (voxelization above is
-    // untouched, so blade growing still works). See CLAUDE.md (Shader Grass shadows).
+    // untouched, so blade growing still works).
     bool sg_short = material_mask == 85u // dedicated short_grass/fern (colour-independent)
         || (material_mask == 2u && tint.g > tint.r + 0.04 && tint.g > tint.b + 0.04); // mod grass (2)
     bool sg_tall = material_mask == 82u || material_mask == 83u;

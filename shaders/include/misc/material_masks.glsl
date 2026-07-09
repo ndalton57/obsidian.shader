@@ -29,6 +29,16 @@
 // material 2, waved like a small plant, and re-emitted as material 2 by the cutout so the fragment
 // shading / cherry recolor are unchanged.
 #define MATERIAL_SHORT_GRASS 85
+// Thin cutout plants: small/tall plants, leaves, plus the Shader Grass split-outs of
+// tall/short grass. Sub-block-thin geometry: SSS models treat these as thin surfaces
+// (full transmission baseline; no solid-cube rim, no silhouette-burial occlusion).
+bool is_thin_plant_mask(uint mask) {
+    return (2u <= mask && mask <= 5u)
+        || mask == uint(MATERIAL_TALL_GRASS_LOWER)
+        || mask == uint(MATERIAL_TALL_GRASS_UPPER)
+        || mask == uint(MATERIAL_SHORT_GRASS);
+}
+
 #define MATERIAL_LAVA 39
 #define MATERIAL_OPEN_EYEBLOSSOM 59
 #define MATERIAL_NETHER_PORTAL 62

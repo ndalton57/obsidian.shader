@@ -374,8 +374,7 @@ void main() {
         // wobble (top face under VERTICAL motion, a side under HORIZONTAL) - +0.5 there centres it
         // mid-cell. Adding +0.5 on the IN-PLANE axes instead shifts the dither grid half a texel off
         // the TEXTURE grid, so each texture texel straddles two dither cells and the recolor splits it
-        // in half. Guarding the normal axis ONLY keeps the in-plane cells aligned to texels. See
-        // CLAUDE.md gotchas #5 and #13.
+        // in half. Guarding the normal axis ONLY keeps the in-plane cells aligned to texels.
         vec3 cherry_offset = 0.5 * abs(round(tbn[2]));
         vec3 cherry_wpos = (scene_pos + cameraPositionFract) * 16.0 + cherry_offset;
         ivec3 cherry_texel = cameraPositionInt * 16 + ivec3(floor(cherry_wpos));

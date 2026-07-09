@@ -126,7 +126,10 @@ void main() {
     );
     vec3 scene_pos = view_to_scene_space(view_pos);
 
-    vec3 previous_screen_pos = reproject_scene_space(scene_pos, false, false);
+    // LoD pixels must reproject with the LoD projection pair, or their AO
+    // history misses every frame and the temporal accumulation never
+    // converges - the raw sample pattern then bands on distant terraces.
+    vec3 previous_screen_pos = reproject_scene_space(scene_pos, false, is_lod);
 
     if (depth == 1.0) {
         ambient = vec4(1.0, 0.0, 0.0, 0.0);
@@ -141,53 +144,9 @@ void main() {
 #endif
 
 #ifdef LOD_MOD_ACTIVE
-    if (is_lod) {
-        // The LoD gbuffer normal decodes broken (see d4) - rebuild the face
-        // normal from depth taps a couple of pixels apart instead (matching
-        // d4: wide taps suppress per-pixel moire striping, picking the
-        // depth-closer neighbour per axis avoids smearing over silhouettes)
-        const int taps_radius = 2;
-        ivec2 max_texel = ivec2(view_res * taau_render_scale) - 1;
-        ivec2 texel_x0 = clamp(view_texel - ivec2(taps_radius, 0), ivec2(0), max_texel);
-        ivec2 texel_x1 = clamp(view_texel + ivec2(taps_radius, 0), ivec2(0), max_texel);
-        ivec2 texel_y0 = clamp(view_texel - ivec2(0, taps_radius), ivec2(0), max_texel);
-        ivec2 texel_y1 = clamp(view_texel + ivec2(0, taps_radius), ivec2(0), max_texel);
-
-        float depth_x0 = texelFetch(combined_depth_tex, texel_x0, 0).x;
-        float depth_x1 = texelFetch(combined_depth_tex, texel_x1, 0).x;
-        float depth_y0 = texelFetch(combined_depth_tex, texel_y0, 0).x;
-        float depth_y1 = texelFetch(combined_depth_tex, texel_y1, 0).x;
-
-        bool pick_x1 = abs(depth_x1 - depth) < abs(depth_x0 - depth);
-        bool pick_y1 = abs(depth_y1 - depth) < abs(depth_y0 - depth);
-
-        vec2 uv_x = uv
-            + vec2((pick_x1 ? texel_x1 : texel_x0) - view_texel)
-                * view_pixel_size * rcp(taau_render_scale);
-        vec2 uv_y = uv
-            + vec2((pick_y1 ? texel_y1 : texel_y0) - view_texel)
-                * view_pixel_size * rcp(taau_render_scale);
-
-        vec3 position_x = screen_to_view_space(
-            combined_projection_matrix_inverse,
-            vec3(uv_x, pick_x1 ? depth_x1 : depth_x0),
-            true
-        );
-        vec3 position_y = screen_to_view_space(
-            combined_projection_matrix_inverse,
-            vec3(uv_y, pick_y1 ? depth_y1 : depth_y0),
-            true
-        );
-
-        vec3 delta_x = pick_x1 ? position_x - view_pos : view_pos - position_x;
-        vec3 delta_y = pick_y1 ? position_y - view_pos : view_pos - position_y;
-
-        vec3 lod_normal_view = normalize(cross(delta_x, delta_y));
-        lod_normal_view = dot(lod_normal_view, view_pos) > 0.0
-            ? -lod_normal_view
-            : lod_normal_view;
-        world_normal = mat3(gbufferModelViewInverse) * lod_normal_view;
-    }
+    // LoD normals come straight from the decode above - voxy_opaque.glsl
+    // encodes the exact per-face axis normal (nudged off the -Z encoding
+    // seam). See the matching note in d4.
 #endif
 
     vec3 view_normal = mat3(gbufferModelView) * world_normal;
@@ -216,6 +175,12 @@ void main() {
         bent_normal
     );
 #endif
+
+    // LoD pixels: AO is computed inline in d4 at FULL resolution (reference
+    // architecture) - it must not pass through this pass's half resolution,
+    // temporal accumulation, or the depth-weighted upsample, each of which
+    // imprints artifacts on LoD content. The value written here for LoD
+    // pixels is never consumed.
 
     // Temporal accumulation
 

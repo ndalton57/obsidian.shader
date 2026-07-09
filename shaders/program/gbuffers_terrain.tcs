@@ -79,6 +79,14 @@ out GrassVertex {
 #endif
 } tc_out[];
 
+#ifdef SHADER_GRASS
+// Election result for this patch (1.0 = this face grows the block's blades),
+// computed once in invocation 0 below - the same value that sets the
+// tessellation levels. The GS reads it (via the TES) instead of re-running
+// the election per sub-triangle, so the two stages agree by construction.
+patch out float tc_grass_elected;
+#endif
+
 void main() {
     // Per-control-point passthrough.
     gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
@@ -112,7 +120,8 @@ void main() {
             bool in_range = dot(bc, bc) < (GRASS_RANGE * GRASS_RANGE);
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
             // Tessellate the single elected grower face of an exposed grass block
-            // (the GS runs the identical election, so they never disagree).
+            // (the GS consumes this patch's result via tc_grass_elected, so the
+            // two stages cannot disagree).
             grass = in_range && grass_air_above(bc)
                 && grass_is_grower(bc, tc_in[0].tbn[2]);
 #else
@@ -120,6 +129,8 @@ void main() {
             grass = in_range && tc_in[0].tbn[2].y > 0.9;
 #endif
         }
+
+        tc_grass_elected = grass ? 1.0 : 0.0;
 #endif
 
         if (grass) {
@@ -127,7 +138,7 @@ void main() {
             // smoothly: a discrete step would retessellate a block as you approach and
             // every blade would JUMP. A float level feeds fractional_odd_spacing (TES),
             // which morphs smoothly. Full density up close, ~half by far range; cost
-            // scales with level^2. See CLAUDE.md.
+            // scales with level^2.
             float lvl = float(GRASS_GRID) * (1.0 - 0.5 * smoothstep(8.0, 28.0, vDist));
 
             gl_TessLevelOuter[0] = lvl;

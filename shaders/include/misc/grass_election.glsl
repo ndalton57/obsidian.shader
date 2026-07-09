@@ -14,7 +14,7 @@
     3 Mask      - shadow-pass face mask.
     4 Race      - first drawn face to reach the pipeline claims the block (FCFS); default.
   Modes 2+ need COLORED_LIGHTS (the voxel volume) + voxelization.glsl included, and
-  the includer must declare the samplers each mode uses. See CLAUDE.md gotcha #9.
+  the includer must declare the samplers each mode uses.
 
 --------------------------------------------------------------------------------
 */
@@ -23,7 +23,7 @@
 #if defined COLORED_LIGHTS && PROCEDURAL_GEOMETRY_MODE >= 2
 
 // Raw voxel id at a scene position. 0 = air, outside the volume, or a fully-enclosed
-// block (the buffer can't tell those apart - see CLAUDE.md).
+// block (the buffer stores only RENDERED faces, so it can't tell those apart).
 uint grass_voxel_at(vec3 scene_p) {
     vec3 vp = scene_to_voxel_space(scene_p);
     if (!is_inside_voxel_volume(vp)) {
@@ -78,12 +78,11 @@ uint grass_face_index(vec3 n) {
 
 // FCFS claim -> the block's winning face id this frame (6 = unclaimed). The first candidate face to
 // reach the cell CAS-claims it (stale -> stamp|me); later faces see the claim and read the winner.
-// The TCS reaches it first (earliest pipeline stage), so it drives which face TESSELLATES; the GS
-// runs the same call but, finding the block already claimed, breaks before any atomic and just reads
-// - a bare imageLoad there. Running the CAS in BOTH stages (not trusting a cross-stage read) makes it
-// robust: a CAS always tests TRUE memory, so even if a coherent imageLoad lagged the TCS write, the
-// CAS still resolves to the real winner. The cutout never grows blades, so its body is stubbed (no
-// image) - it needs neither the image binding nor the extension.
+// With tessellation active only the TCS calls this - it drives which face TESSELLATES and hands the
+// result to the GS as the tc_grass_elected patch flag (pipeline data, so no cross-stage memory read
+// to trust). In the no-tessellation fallback the GS calls it instead: the CAS still resolves against
+// TRUE memory, so contending faces settle to one winner there too. The cutout never grows blades, so
+// its body is stubbed (no image) - it needs neither the image binding nor the extension.
 uint grass_claim(ivec3 cell, uint my_face) {
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
     uint stamp = grass_stamp_now();
@@ -111,7 +110,7 @@ uint grass_claim(ivec3 cell, uint my_face) {
 // ----- Mode 3 (Mask, shadow pass) -----
 // True if this grass-block face toward `dir` was meshed in the shadow pass (it stamped the air
 // cell it faces). Unlike the deduced neighbour read it isn't blind to fully-enclosed blocks;
-// unlike mode 4 (Race) it still can't see the camera's per-section direction culling. See CLAUDE.md.
+// unlike mode 4 (Race) it still can't see the camera's per-section direction culling.
 bool grass_face_rendered(vec3 block_center, vec3 dir) {
     vec3 vp = scene_to_voxel_space(block_center + dir);
     if (!is_inside_voxel_volume(vp)) {

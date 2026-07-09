@@ -4,8 +4,6 @@
 #include "/include/utility/fast_math.glsl"
 #include "/include/utility/random.glsl"
 
-uniform float day_factor;
-
 struct Weather {
     float temperature; // [0, 1]
     float humidity; // [0, 1]

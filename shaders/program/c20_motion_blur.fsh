@@ -55,6 +55,22 @@ void main() {
 
     float depth = texelFetch(depthtex0, view_texel, 0).x;
 
+#ifdef LOD_MOD_ACTIVE
+    // LoD terrain is not in the vanilla depth buffer (its pixels read 1.0
+    // there): substitute the LoD depth re-encoded into vanilla depth space
+    // (Z rows only - same pattern as c2_dof), so the blur velocity is the
+    // surface's own rather than a far-plane point's, which over-streaks
+    // distant terrain in flight
+    float depth_lod = texelFetch(lod_depth_tex, view_texel, 0).x;
+
+    if (is_lod_terrain(depth, depth_lod)) {
+        depth = view_to_screen_space_depth(
+            gbufferProjection,
+            screen_to_view_space_depth(lod_projection_matrix_inverse, depth_lod)
+        );
+    }
+#endif
+
     if (depth < hand_depth) {
         scene_color = texelFetch(colortex0, texel, 0).rgb;
         return;

@@ -11,16 +11,6 @@
 
 #include "/include/global.glsl"
 
-// The End: Voxy's state there is unreliable (it logs zero-size viewports, and
-// its depth/projection uniforms reconstruct LoD geometry at displaced
-// positions), so the fog march must not substitute LoD depth for sky/void
-// pixels — doing so silhouettes huge dark ghost copies of pillars/ships/
-// islands into the fog that swim with the camera. Fog in the End marches
-// against vanilla depth only.
-#if defined WORLD_END && defined LOD_MOD_ACTIVE
-#undef LOD_MOD_ACTIVE
-#endif
-
 layout(location = 0) out vec3 fog_transmittance;
 layout(location = 1) out vec3 fog_scattering;
 
@@ -154,34 +144,31 @@ void main() {
     vec4 gbuffer_data_0 = texelFetch(colortex1, view_texel, 0);
 
 #ifdef LOD_MOD_ACTIVE
-    mat4 projection_matrix, projection_matrix_inverse;
-    bool is_lod;
-    float depth_lod = texelFetch(lod_depth_tex, view_texel, 0).x;
+    bool is_lod = false;
 
     if (depth0 == 1.0) {
+        // No vanilla geometry here: march the fog against the LoD depth
+        // instead (1.0 = real sky). The position is reconstructed via
+        // lod_screen_to_view_space, which avoids the LoD projection's X/Y
+        // columns (degenerate in Voxy's End state - see space_conversion.glsl)
         is_lod = true;
+        float depth_lod = texelFetch(lod_depth_tex, view_texel, 0).x;
         depth0 = depth_lod;
         depth1 = depth_lod;
-        projection_matrix = lod_projection_matrix;
-        projection_matrix_inverse = lod_projection_matrix_inverse;
-    } else {
-        is_lod = false;
-        projection_matrix = gbufferProjection;
-        projection_matrix_inverse = gbufferProjectionInverse;
     }
 #else
 #define is_lod false
-#define projection_matrix gbufferProjection
-#define projection_matrix_inverse gbufferProjectionInverse
 #endif
 
     float skylight = unpack_unorm_2x8(gbuffer_data_0.w).y;
 
-    vec3 view_pos = screen_to_view_space(
-        projection_matrix_inverse,
-        vec3(uv, depth0),
-        true
-    );
+    vec3 view_pos = is_lod
+        ? lod_screen_to_view_space(vec3(uv, depth0), true)
+        : screen_to_view_space(
+              gbufferProjectionInverse,
+              vec3(uv, depth0),
+              true
+          );
     vec3 scene_pos = view_to_scene_space(view_pos);
     vec3 world_pos = scene_pos + cameraPosition;
 

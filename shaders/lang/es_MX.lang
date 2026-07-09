@@ -263,7 +263,6 @@ option.BLOCKY_CLOUDS_SHARPNESS         = Nitidez
 option.BLOCKY_CLOUDS_SHARPNESS.comment = Nitidez del borde de la nube
 
 option.CLOUDS_TEMPORAL_UPSCALING       = Escalado temporal
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = Perspectiva aérea mejorada
 option.CLOUDS_SCALE                    = Escala
 option.CLOUDS_SCALE.comment            = Se aplica como factor de escala a todas las nubes para que pasen de un tamaño y una altitud realistas a una altitud accesible durante el juego. Si este valor es 1.0, las nubes se posicionan de forma realista, con la primera capa de 800 bloques por defecto. Si este valor es mayor, las nubes se verán más pequeñas y se formarán más cerca del suelo. Esto también afecta al tamaño de las sombras de las nubes.
 suffix.CLOUDS_SCALE                    = ×

@@ -884,6 +884,35 @@ Material material_from(
 #endif
     }
 
+    if (material_mask == 82u || material_mask == 83u) { // tall_grass / large_fern
+// Split out of tall plants (masks 3/4) for the grass geometry shader; shaded as tall
+// plants: same SSS translucency and sheen.
+#ifdef HARDCODED_SSS
+        material.sss_amount = 0.5;
+        material.sheen_amount = 1.0;
+#endif
+    }
+
+    if (material_mask == 85u) { // short_grass / fern
+// Split out of small plants (mask 2) for the grass geometry shader; shaded as small
+// plants: SSS translucency, no sheen (see the mask-2 note above).
+#ifdef HARDCODED_SSS
+        material.sss_amount = 0.5;
+#endif
+    }
+
+    if (material_mask == 93u) { // redstone wire
+// Own mask (the voxelizer needs a forced-stable marker for its flat quad; see
+// block.properties). Emission is chroma-keyed like the other redstone
+// components (mask 38): bright powered texels glow, dark unpowered wire not.
+#ifdef HARDCODED_EMISSION
+        vec3 ap1 = material.albedo * rec2020_to_ap1_unlit;
+        float l = 0.5 * (min_of(ap1) + max_of(ap1));
+        float redness = ap1.r * rcp(ap1.g + ap1.b);
+        material.emission = 0.33 * material.albedo * step(0.45, redness * l);
+#endif
+    }
+
 #if defined FANCY_LAVA && defined PROGRAM_DEFERRED4
     if (material_mask == 39u) {
         // Lava - procedural texture: the vanilla texture's bright texels

@@ -60,7 +60,7 @@
 
 // Shader Grass: close-range TESSELLATION LEVEL per density (the TCS gl_TessLevel; the GS grows one
 // blade per sub-triangle). Despite the name this is the tessellation density, not a grid lattice.
-// Cost scales with the SQUARE of the level. 6,9,12,17,21 for density 1..5. See CLAUDE.md.
+// Cost scales with the SQUARE of the level. 6,9,12,17,21 for density 1..5.
 #if GRASS_DENSITY >= 5
 #define GRASS_GRID 21
 #elif GRASS_DENSITY == 4
@@ -94,7 +94,7 @@
 // 128. No collision while (range + range) < SIZE, i.e. GRASS_RANGE <~ 146 here - so 256 covers the
 // whole 8..128 range slider with margin. MUST match grass_claim_img in shaders.properties. r32ui
 // per-block, SINGLE buffer (same-frame claim) ~67 MB. Raise only if you raise VOXEL_VOLUME_SIZE or
-// push GRASS_RANGE past ~146. See CLAUDE.md gotcha #9.
+// push GRASS_RANGE past ~146.
 #define GRASS_MASK_SIZE 256
 
 // Shader Grass: footprint of the per-block TOP-tint buffer - a GRASS_TINT_SIZE^3 voxel region,

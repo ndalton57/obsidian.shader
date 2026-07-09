@@ -106,13 +106,15 @@ bool raymarch_shadow(
     return hit;
 }
 
+// Vanilla-terrain screen-space shadows (no LoD mod / near-SSRT config). With a
+// LoD mod active, LoD pixels use get_lod_screen_space_light below instead, and
+// vanilla far-field pixels take no cast shadow from any march (the LoD buffer
+// has no data for them, and marching the vanilla depth at far-field scale
+// mass-shadows terrain relief - aerial dark blobs).
 float get_screen_space_shadows(
     vec2 position_screen_xy,
     vec3 position_view,
     float depth,
-#ifdef LOD_MOD_ACTIVE
-    float depth_lod,
-#endif
     float skylight,
     bool has_sss,
     inout float sss_depth
@@ -126,38 +128,6 @@ float get_screen_space_shadows(
     vec3 ray_dir
         = normalize(view_light_dir + 0.03 * uniform_sphere_sample(hash));
 
-#ifdef LOD_MOD_ACTIVE
-    // Far-field (Voxy LoD) terrain marches the LoD-only depth buffer at EVERY
-    // far-field distance, so the cast shadow comes from LoD geometry alone.
-    // Marching the combined buffer (near vanilla + LoD) for the nearest strip
-    // would let near vanilla terrain cast onto the LoD - but only within a fixed
-    // CAMERA distance (far+64), so that shadow slides forward with the player and
-    // drops the moment terrain crosses the strip edge, instead of staying put on
-    // the terrain. One buffer at all far-field distances keeps the shadow stable.
-    bool hit = raymarch_shadow(
-        lod_depth_tex,
-        lod_projection_matrix,
-        lod_projection_matrix_inverse,
-        vec3(position_screen_xy, depth_lod),
-        screen_to_view_space(
-            lod_projection_matrix_inverse,
-            vec3(position_screen_xy, depth_lod),
-            true
-        ),
-        ray_dir,
-        has_sss,
-        dither,
-        sss_depth
-    );
-
-    // Thin-surface baseline for the far-field transmission. On thick LoD terrain
-    // the shadow march returns -1 (occluded beyond the surface), which would
-    // suppress the distant glow entirely; the transmission is instead shaped
-    // per-pixel by the screen-space occlusion ray (get_sss_screen_occlusion),
-    // which marches the LoD projection clipped to the LoD near/far planes so it
-    // reads the same at every far-field distance.
-    sss_depth = 0.0;
-#else
     bool hit = raymarch_shadow(
         depthtex1,
         gbufferProjection,
@@ -169,7 +139,6 @@ float get_screen_space_shadows(
         dither,
         sss_depth
     );
-#endif
 
     // Light-leak prevention is now applied once to the combined shadow result
     // in d4_deferred_shading (see get_lightmap_light_leak_prevention), so it is
@@ -195,7 +164,14 @@ float swapperlinZ(float depth, float near_plane, float far_plane) {
 // (16 / 48000 for Voxy; dhNearPlane/dhFarPlane for DH) - so the occlusion reads
 // the same at every far-field distance and camera angle. sss_transmission_sun
 // consumes the result to shape the transmission per pixel.
-float get_sss_screen_occlusion(
+// Returns vec2(cast shadow, SSS occlusion). The shadow half is the reference
+// implementation's own contact-shadow test living in the SAME march: a hit
+// counts as a shadow caster when the ray sits within a RELATIVE,
+// distance-proportional window of the sampled surface (0.035/(1+linZ) of the
+// current linear depth). Fixed fine steps + relative window is what keeps
+// distant terraced slopes clean where a geometric-step marcher with an
+// absolute thickness window aliases into stripes.
+vec2 get_sss_screen_occlusion(
     vec2 position_screen_xy,
     vec3 position_view, // combined projection space
     float depth // combined depth
@@ -212,22 +188,37 @@ float get_sss_screen_occlusion(
 
     // Far-field marches the LoD-only opaque buffer in LoD projection with the
     // LoD near/far planes; near-field stays in combined space.
+    // LoD ray setup is kept EXACTLY input-consistent with the buffer it
+    // marches: the origin depth comes from the SAME opaque buffer the samples
+    // read (an origin from the translucent-inclusive buffer sits a hair off
+    // the sampled surface and beats against the self-intersection bias as
+    // banding), and no TAA-jitter compensation is applied on the LoD path -
+    // the LoD depth is rendered unjittered, so unapplying jitter would
+    // mis-register the ray against it every frame.
     mat4 proj = combined_projection_matrix;
     vec3 frag_view = position_view;
     float frag_z = depth;
     float near_plane = combined_near;
     float far_plane = combined_far;
+    bool handle_jitter = true;
 #ifdef LOD_MOD_ACTIVE
     if (is_lod) {
+        float depth_lod_solid = texelFetch(
+                                    lod_depth_tex_solid,
+                                    ivec2(gl_FragCoord.xy),
+                                    0
+        )
+                                    .x;
         proj = lod_projection_matrix;
         frag_view = screen_to_view_space(
             lod_projection_matrix_inverse,
-            vec3(position_screen_xy, depth_lod),
-            true
+            vec3(position_screen_xy, depth_lod_solid),
+            false
         );
-        frag_z = depth_lod;
+        frag_z = depth_lod_solid;
         near_plane = lod_near; // dhVoxyNearPlane (16 for Voxy)
         far_plane = lod_far;   // dhVoxyFarPlane (48000 for Voxy)
+        handle_jitter = false;
     }
 #endif
 
@@ -243,7 +234,7 @@ float get_sss_screen_occlusion(
     vec3 direction = view_to_screen_space(
                          proj,
                          frag_view + view_light_dir * ray_length,
-                         true
+                         handle_jitter
                      )
         - position;
     direction /= max(
@@ -259,6 +250,7 @@ float get_sss_screen_occlusion(
         = 1.0 / (1.0 + swapperlinZ(position.z, near_plane, far_plane) * 32.0);
     float distance_weight = 1.0 + length(frag_view) / 150.0;
 
+    float shadow = 1.0;
     float occlusion = 0.0;
 
     for (int i = 0; i < step_count; ++i) {
@@ -288,6 +280,10 @@ float get_sss_screen_occlusion(
             float dist
                 = abs(linear_sample - linear_current) / linear_current;
 
+            if (dist < 0.035 / (1.0 + linear_current)) {
+                shadow = 0.0;
+            }
+
             if (dist < sss_distance_scale) {
                 occlusion += distance_weight;
             }
@@ -296,7 +292,7 @@ float get_sss_screen_occlusion(
         ray_pos += direction;
     }
 
-    return occlusion * rcp(float(step_count));
+    return vec2(shadow, occlusion * rcp(float(step_count)));
 }
 
 #endif // INCLUDE_LIGHTING_SHADOWS_SSRT_SHADOWS

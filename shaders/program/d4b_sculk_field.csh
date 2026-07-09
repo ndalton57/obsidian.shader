@@ -62,7 +62,10 @@ void main() {
     mat4 projection_matrix_inverse = gbufferProjectionInverse;
 #ifdef LOD_MOD_ACTIVE
     if (depth == 1.0) {
-        depth = texelFetch(lod_depth_tex, texel, 0).x;
+        // Solid LoD depth: the mask-46 pixel is an opaque sculk surface, so
+        // anchor its field cell at the solid depth - the translucent buffer
+        // would return the water surface over flooded sculk
+        depth = texelFetch(lod_depth_tex_solid, texel, 0).x;
         projection_matrix_inverse = lod_projection_matrix_inverse;
     }
 #endif

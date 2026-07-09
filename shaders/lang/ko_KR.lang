@@ -280,7 +280,6 @@ option.BLOCKY_CLOUDS_WIND_ANGLE          = 풍향
 suffix.BLOCKY_CLOUDS_WIND_ANGLE          = °
 
 option.CLOUDS_TEMPORAL_UPSCALING       = 시간적 업스케일링
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = 대기 원근법 증폭
 option.CLOUDS_SCALE                    = 스케일
 option.CLOUDS_SCALE.comment            = 모든 구름에 적용되는 스케일 배율로, 현실적인 크기와 고도의 구름을 게임 플레이 중 접근 가능한 고도로 낮춰줍니다. 값이 1.0이면 구름이 현실적으로 배치되어 첫 번째 레이어가 기본적으로 800블록 위에 있습니다. 값이 더 높으면 구름이 더 작아 보이고 지면에 더 가까이 형성됩니다. 이 옵션은 구름 그림자의 크기에도 영향을 미칩니다
 suffix.CLOUDS_SCALE                    = ×

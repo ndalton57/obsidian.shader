@@ -285,10 +285,14 @@ vec3 sss_transmission_sun(
     // a DEEPLY buried ray always wins, so a thick occluder the ray can see but
     // the depth path under-measured can't glow through.
     float ss_shadows = exp(-7.0 * ss_occlusion) * 0.7;
+    // Escape weight is constant-scaled (reference parity). Folding the
+    // occlusion into the weight itself snapped it to zero on the FIRST buried
+    // step - a two-level squarewave across terrace rows on distant SSS
+    // terrain (grass/leaf LoD banding).
     scatter_depth *= mix(
         ss_shadows,
         1.0,
-        (1.0 - clamp01(ss_occlusion)) * 0.5 * scatter_depth * distant_sss
+        0.5 * scatter_depth * distant_sss
     );
 
     // Light that travels deeper takes on the material's colour, shifted warm
@@ -395,7 +399,12 @@ vec3 get_diffuse_lighting(
     }
 
 #ifdef AO_IN_SUNLIGHT
-    diffuse *= sqr(ao);
+    // Near field keeps the strong sqr(ao) curve. The far model uses the
+    // reference curve with a 0.3 floor: the LoD spiral SSAO legitimately
+    // carries scene-scale occlusion (foreground shapes shading far walls),
+    // which sqr() amplifies into visible dark imprints ("ghosting"); the
+    // floored curve renders the same signal as subtle contact shading.
+    diffuse *= is_near_field ? sqr(ao) : (ao * 0.7 + 0.3);
 #endif
 
     // ONE model per call: this evaluates either the near-field (shadow-map) OR the far-field
@@ -437,7 +446,11 @@ vec3 get_diffuse_lighting(
             * float(!sss_blocked);
 
         // Transmission shows exactly where direct light doesn't reach: the two
-        // crossfade so a face is never lit by both at once
+        // crossfade so a face is never lit by both at once.
+        // NOTE: `diffuse` (shared shaping incl. AO_IN_SUNLIGHT) is safe here
+        // ONLY while the LoD AO source is the band-free spiral SSAO in d3 -
+        // a horizon-AO output multiplied into this term printed terrace
+        // striping onto every sunlit LoD face.
         vec3 sunlit = diffuse * shadows;
         lighting += sunlit + sss * clamp01(1.0 - sunlit) + bounced;
     }

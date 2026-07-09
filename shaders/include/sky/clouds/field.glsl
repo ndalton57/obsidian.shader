@@ -14,9 +14,11 @@
 
   Transport around the field: quarter-res checkerboard render in
   d1_clouds, temporal upscaling in d2 (which needs the apparent_distance this
-  file accumulates), distance-based compositing in d4, and a direction-only
-  render into the d0 sky map (reflections + ambient SH, which is what darkens
-  ambient light under storm cover).
+  file accumulates), and distance-based compositing in d4. The clouds are
+  NEVER rendered into the d0 sky map: that map feeds the ambient SH and the
+  sky reflections, and cloud cover must not change ambient brightness - storm
+  darkening comes from the cloud shadow map on the sun instead, so sky-map
+  reflections stay cloudless by design.
 
   Cloud shapes sample CLOUD_NOISETEX (image/cloud_noises.png, an Iris
   customTexture sampler named cloud_noisetex — every colortex slot is taken by
@@ -673,7 +675,16 @@ CloudsResult renderClouds(
     float light_scale = rcp(tau * 1.13);
 
     vec3 dV_Sun = light_dir;
-    vec3 LightColor = (sunAngle < 0.5 ? sun_color : moon_color) * light_scale;
+    // Fade the direct light out as its source nears the horizon, matching the
+    // terrain light color (clamp01(light_dir.y / 0.02)). sun_color and
+    // moon_color are raw exposure*tint with no horizon falloff, and light_dir /
+    // the color flip at the sunAngle day-night threshold; without the fade the
+    // deck snaps from dim moonlight straight to full (blue-hour-boosted)
+    // sunlight the instant that flip happens at dawn/dusk, instead of ramping
+    // through the horizon as both sources sit at y = 0.
+    float light_horizon_fade = clamp01(rcp(0.02) * light_dir.y);
+    vec3 LightColor = (sunAngle < 0.5 ? sun_color : moon_color) * light_scale
+        * light_horizon_fade;
     vec3 SkyColor = sky_color * light_scale;
 
     float SdotV = dot(light_dir, ray_dir);

@@ -9,7 +9,11 @@ layout(location = 0) out vec4 gbuffer_data_0;
 void voxy_emitFragment(VoxyFragmentParameters parameters) {
     // Get base properties
 
-    uint material_mask = max(parameters.customId - 10000u, 0u);
+    // customId < 10000 = block with no block.properties mapping -> mask 0
+    // (default material). Unsigned subtraction would wrap, not clamp.
+    uint material_mask = parameters.customId < 10000u
+        ? 0u
+        : parameters.customId - 10000u;
 
     vec3 tinting = parameters.tinting.rgb;
 #if defined CHERRY_GROVE_PINK_GRASS && defined WORLD_OVERWORLD
@@ -29,6 +33,13 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
                       uint((parameters.face >> 1) == 1)
                   )
         * (float(int(parameters.face) & 1) * 2.0 - 1.0);
+
+    // Exact axis vectors sit on the unit-vector encoding's fold seams; the
+    // -Z face in particular can decode to garbage. Nudge it off the seam
+    // (reference does the same in its own encoding).
+    if (normal.z <= -0.9) {
+        normal.xy = vec2(-1e-13);
+    }
 
     // Encode gbuffer data
 

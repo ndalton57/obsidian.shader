@@ -1,4 +1,4 @@
-#if !defined INCLUDE_SKY_SKYsky
+#if !defined INCLUDE_SKY_SKY
 #define INCLUDE_SKY_SKY
 
 #include "/include/utility/color.glsl"

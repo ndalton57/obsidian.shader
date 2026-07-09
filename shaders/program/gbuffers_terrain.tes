@@ -55,6 +55,13 @@ out GrassVertex {
 #endif
 } te_out;
 
+#ifdef SHADER_GRASS
+// Per-patch election result from the TCS, handed on to the GS unchanged
+// (every vertex of the patch carries the same value).
+patch in float tc_grass_elected;
+flat out float te_grass_elected;
+#endif
+
 #define bary(a, b, c) \
     (gl_TessCoord.x * (a) + gl_TessCoord.y * (b) + gl_TessCoord.z * (c))
 
@@ -78,6 +85,10 @@ void main() {
     te_out.material_mask = te_in[0].material_mask;
     te_out.tbn = te_in[0].tbn;
     te_out.block_center = te_in[0].block_center;
+
+#ifdef SHADER_GRASS
+    te_grass_elected = tc_grass_elected;
+#endif
 
 #ifdef POM
     te_out.atlas_tile_coord = bary(

@@ -31,23 +31,7 @@
 
 const float vortexBoundRange = 300.0;
 
-// 3D noise from the 2D noise texture (y/x channel pair, y-sliced, smoothstep
-// interpolated — the fog variant; the overworld cloud field uses the
-// unsmoothed version)
-float densityAtPosFog(in vec3 pos) {
-    pos /= 18.0;
-    pos.xz *= 0.5;
-
-    vec3 p = floor(pos);
-    vec3 f = fract(pos);
-
-    f = (f * f) * (3.0 - 2.0 * f);
-    vec2 uv = p.xz + f.xz + p.y * vec2(0.0, 193.0);
-    vec2 coord = uv / 512.0;
-    vec2 xy = texture(CLOUD_NOISETEX, coord).yx;
-
-    return mix(xy.r, xy.g, f.y);
-}
+#include "/include/fog/fog_density_noise.glsl"
 
 // Create a rising swirl centered around the world origin
 void SwirlAroundOrigin(inout vec3 alteredOrigin, vec3 origin) {

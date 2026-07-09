@@ -268,8 +268,9 @@ void main() {
 #define shadow_distance_fade 0.0
 
 #ifdef CLOUD_SHADOWS
+    // Passed to get_diffuse_lighting, which applies it to the sun term;
+    // multiplying it into `shadows` as well would square it
     float cloud_shadows = get_cloud_shadows(colortex8, scene_pos);
-    shadows *= cloud_shadows;
 #endif
 
     fragment_color.rgb = get_diffuse_lighting(

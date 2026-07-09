@@ -9,7 +9,7 @@
   field, so the terrain geometry shader can read the height boost with ONE field
   lookup per blade instead of an N*N neighbour scan per blade (which was GS-bound and
   tanked FPS). Runs as a world0 shadowcomp, after the shadow pass has voxelized the
-  scene. See CLAUDE.md (Short-grass bushiness).
+  scene.
 
 --------------------------------------------------------------------------------
 */

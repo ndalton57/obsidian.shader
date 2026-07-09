@@ -265,7 +265,6 @@ option.BLOCKY_CLOUDS_SHARPNESS         = 云层边缘锐利程度
 option.BLOCKY_CLOUDS_SHARPNESS.comment = 调节方块云层边缘的锐利程度.
 
 option.CLOUDS_TEMPORAL_UPSCALING       = 云层时间性升采样
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = 空中云层透视增益
 option.CLOUDS_SCALE                    = 云层缩放
 option.CLOUDS_SCALE.comment            = 对所有云层进行缩放, 以调整云层大小和高度, 使其在游戏中更易于接触. 如果这个值是1.0, 云层将按照现实高度分布, 默认第一层在800个方块的高度. 如果这个值更高, 云层将显得更小, 更贴近地面. 这也会影响云影的大小. 
 suffix.CLOUDS_SCALE                    = ×

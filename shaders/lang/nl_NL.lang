@@ -268,7 +268,6 @@ option.BLOCKY_CLOUDS_SHARPNESS.comment = De scherpte van de blokkerige wolken.
 
 option.CLOUDS_TEMPORAL_UPSCALING       = Accumulerende Opschaling
 option.CLOUDS_TEMPORAL_UPSCALING.comment = Vermindert de prestatiekosten van de wolken enorm door middel van frame-accumulatie, maar creëert artefacten.
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = Luchtperspectief Boost
 option.CLOUDS_SCALE                    = Grootte
 option.CLOUDS_SCALE.comment            = Wijzigt de hoogte en grootte van de wolken zodat ze bereikbaar zijn in normale gameplay. Bij een grootte van 1x is de eerste laag wolken op een hoogte van 800 blokken.
 suffix.CLOUDS_SCALE                    = ×

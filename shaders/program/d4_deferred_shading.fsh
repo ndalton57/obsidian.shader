@@ -197,6 +197,7 @@ const bool colortex11MipmapEnabled = true;
 #include "/include/lighting/shadows/ssrt.glsl"
 #include "/include/lighting/specular_lighting.glsl"
 #include "/include/misc/lod_mod_support.glsl"
+#include "/include/misc/material_masks.glsl"
 #include "/include/misc/purkinje_shift.glsl"
 #include "/include/sky/sky.glsl"
 #include "/include/surface/edge_highlight.glsl"
@@ -217,6 +218,82 @@ const bool colortex11MipmapEnabled = true;
 
 #if defined CLOUD_SHADOWS
 #include "/include/lighting/cloud_shadows.glsl"
+#endif
+
+#ifdef LOD_MOD_ACTIVE
+// Full-resolution spiral SSAO for LoD terrain, computed inline (reference
+// architecture): raw depth per tap with the matching projection, a
+// screen-proportional disc, and coplanarity rejection so flat treads never
+// occlude. Deliberately NOT the d3 pass: half resolution, temporal
+// accumulation, and the depth-weighted upsample each imprint artifacts on
+// LoD content (terrace banding, ghost images).
+float compute_lod_ssao(
+    vec2 uv,
+    float depth_lod,
+    vec3 view_face_normal,
+    ivec2 texel,
+    float dither
+) {
+    const int sample_count = 7;
+
+    vec3 view_pos_lod = screen_to_view_space(
+        lod_projection_matrix_inverse,
+        vec3(uv, depth_lod),
+        false
+    );
+
+    float view_dist = length(view_pos_lod);
+    float distance_scale
+        = mix(40.0, 10.0, sqr(clamp01(1.0 - view_dist * (1.0 / 50.0))));
+    float range_sq = sqr(view_dist) / distance_scale;
+
+    ivec2 max_texel = ivec2(view_res * taau_render_scale) - 1;
+
+    float occlusion = 0.0;
+    float n = 0.0;
+
+    for (int i = 0; i < sample_count; ++i) {
+        float angle = (float(i) + dither) * golden_angle;
+        float radius = sqrt((float(i) + 0.5) * (1.0 / float(sample_count)));
+        vec2 offset_px = radius * vec2(cos(angle), sin(angle))
+            * (view_res.x / distance_scale);
+
+        ivec2 tap_texel = clamp(texel + ivec2(offset_px), ivec2(0), max_texel);
+        vec2 tap_uv
+            = (vec2(tap_texel) + 0.5) * view_pixel_size * rcp(taau_render_scale);
+
+        float tap_depth = texelFetch(depthtex1, tap_texel, 0).x;
+        vec3 tap_view;
+        if (tap_depth < 1.0) {
+            tap_view = screen_to_view_space(
+                gbufferProjectionInverse, vec3(tap_uv, tap_depth), true);
+        } else {
+            tap_depth = texelFetch(lod_depth_tex_solid, tap_texel, 0).x;
+            if (tap_depth == 0.0) {
+                continue; // empty LoD texel (sky)
+            }
+            tap_view = screen_to_view_space(
+                lod_projection_matrix_inverse, vec3(tap_uv, tap_depth), false);
+        }
+
+        vec3 diff = tap_view - view_pos_lod;
+        float diff_sq = dot(diff, diff);
+        if (diff_sq > 1e-5) {
+            vec3 dir = diff * inversesqrt(diff_sq);
+            float range_window = max0(1.0 - diff_sq / range_sq);
+            n += 1.0;
+            // Coplanarity rejection: on-plane samples never occlude
+            float pre_ao = 1.0 - clamp01(dot(dir, view_face_normal) * 25.0);
+            occlusion += max0(dot(dir, view_face_normal) - pre_ao) * range_window;
+        }
+    }
+
+    // Contrast shaping: the reference applies a steep curve on its side
+    // (pow4 into ambient); a source-side exponent deepens crevice darkening
+    // without touching the lit areas. Raise for stronger LoD AO.
+    const float lod_ao_contrast = 2.0;
+    return pow(max0(1.0 - occlusion / max(n, 1e-5)), lod_ao_contrast);
+}
 #endif
 
 void main() {
@@ -399,62 +476,15 @@ void main() {
         bool parallax_shadow = false;
 
 #ifdef LOD_MOD_ACTIVE
-        if (is_lod) {
-            // The LoD gbuffer normal decodes broken (uniformly invalid - NoL
-            // never positive), so rebuild the face normal from the depth
-            // buffer instead. Taps are taken a couple of pixels apart rather
-            // than from raw derivatives: at LoD distances one pixel can span
-            // several terrain steps, and per-pixel derivative normals flip
-            // orientation pixel to pixel, striping the lighting with moire.
-            // On each axis the depth-closer neighbour is used, so normals
-            // don't smear across silhouettes
-            const int taps_radius = 2;
-            ivec2 max_texel = ivec2(view_res * taau_render_scale) - 1;
-            ivec2 texel_x0 = clamp(texel - ivec2(taps_radius, 0), ivec2(0), max_texel);
-            ivec2 texel_x1 = clamp(texel + ivec2(taps_radius, 0), ivec2(0), max_texel);
-            ivec2 texel_y0 = clamp(texel - ivec2(0, taps_radius), ivec2(0), max_texel);
-            ivec2 texel_y1 = clamp(texel + ivec2(0, taps_radius), ivec2(0), max_texel);
-
-            float depth_x0 = texelFetch(combined_depth_tex, texel_x0, 0).x;
-            float depth_x1 = texelFetch(combined_depth_tex, texel_x1, 0).x;
-            float depth_y0 = texelFetch(combined_depth_tex, texel_y0, 0).x;
-            float depth_y1 = texelFetch(combined_depth_tex, texel_y1, 0).x;
-
-            bool pick_x1 = abs(depth_x1 - depth) < abs(depth_x0 - depth);
-            bool pick_y1 = abs(depth_y1 - depth) < abs(depth_y0 - depth);
-
-            vec2 uv_x = uv
-                + vec2((pick_x1 ? texel_x1 : texel_x0) - texel)
-                    * view_pixel_size * rcp(taau_render_scale);
-            vec2 uv_y = uv
-                + vec2((pick_y1 ? texel_y1 : texel_y0) - texel)
-                    * view_pixel_size * rcp(taau_render_scale);
-
-            vec3 position_x = screen_to_view_space(
-                combined_projection_matrix_inverse,
-                vec3(uv_x, pick_x1 ? depth_x1 : depth_x0),
-                true
-            );
-            vec3 position_y = screen_to_view_space(
-                combined_projection_matrix_inverse,
-                vec3(uv_y, pick_y1 ? depth_y1 : depth_y0),
-                true
-            );
-
-            vec3 delta_x = pick_x1
-                ? position_x - position_view
-                : position_view - position_x;
-            vec3 delta_y = pick_y1
-                ? position_y - position_view
-                : position_view - position_y;
-
-            vec3 lod_normal_view = normalize(cross(delta_x, delta_y));
-            lod_normal_view = dot(lod_normal_view, position_view) > 0.0
-                ? -lod_normal_view
-                : lod_normal_view;
-            flat_normal = mat3(gbufferModelViewInverse) * lod_normal_view;
-            normal = flat_normal;
-        }
+        // LoD normals come straight from the standard decode above:
+        // voxy_opaque.glsl encodes the exact per-face axis normal (from the
+        // mod's face enum, nudged off the -Z encoding seam). Per-face
+        // quantized normals ARE the vanilla-style face shading on LoD terrain
+        // (distinct light levels per face family), and together with the far
+        // model's grazing dead zone they keep the screen-space shadow march's
+        // noisiest verdicts off-screen. A depth-based smooth reconstruction
+        // lived here before - it flattened the face shading away and lit the
+        // grazing zone.
 
         if (!is_lod) {
 #endif
@@ -541,6 +571,24 @@ void main() {
             = sqrt(clamp01(1.0 - dot(bent_normal.xy, bent_normal.xy)));
         bent_normal = mat3(gbufferModelViewInverse) * bent_normal;
 
+#ifdef LOD_MOD_ACTIVE
+        if (is_lod) {
+            // Inline full-res LoD SSAO replaces the d3 value entirely - see
+            // compute_lod_ssao above.
+            float lod_dither = texelFetch(noisetex, texel & 511, 0).b;
+            lod_dither = r1(frameCounter, lod_dither);
+            ao = compute_lod_ssao(
+                uv,
+                depth_lod,
+                mat3(gbufferModelView) * flat_normal,
+                texel,
+                lod_dither
+            );
+            ambient_sss = 0.0;
+            bent_normal = flat_normal;
+        }
+#endif
+
         // Sense check bent normal
         if (dot(bent_normal, normal) < eps) {
             bent_normal = normal;
@@ -602,7 +650,21 @@ void main() {
         //   FAR FIELD  (deep Voxy LoD)    -> FAR model:  SSRT shadows + screenspace SSS,
         //                                    plus the distant-ambient dimming.
         //   MID FIELD  (the transition)   -> a LOD_BLEND_WIDTH-wide band centred on the
-        //                                    LoD border (vanilla render distance, far).
+        //                                    SHADOW-DATA border, min(shadowDistance, far):
+        //                                    the near model is only ever picked where the
+        //                                    shadow map has data. Past it, EVERYTHING is
+        //                                    far field - real vanilla terrain past
+        //                                    shadowDistance and Voxy LoD run the same far
+        //                                    model with the same inputs, so the two never
+        //                                    read differently. When the shadow map covers
+        //                                    the whole render distance this border IS the
+        //                                    LoD border. KNOWN LIMIT: on dense vanilla
+        //                                    micro-geometry (grass crosses) the far
+        //                                    model's screen-space march has residual
+        //                                    camera-motion flicker; the planned fix is a
+        //                                    min-depth pyramid for the march, not model
+        //                                    re-routing (a dark near-model band reads
+        //                                    worse than the flicker).
         //                                    Each pixel STOCHASTICALLY picks near or far
         //                                    (pick_far) and TAA resolves the dither to a
         //                                    seamless gradient. A smooth mix instead
@@ -612,9 +674,10 @@ void main() {
         //                                    coherent edge to see.
         // lod_blend: 0 deep-near -> 1 deep-far, the per-pixel probability of picking far.
         // ---------------------------------------------------------------------------
+        float fork_border = min(shadowDistance, far);
         float lod_blend = smoothstep(
-            far - 0.5 * LOD_BLEND_WIDTH,
-            far + 0.5 * LOD_BLEND_WIDTH,
+            fork_border - 0.5 * LOD_BLEND_WIDTH,
+            fork_border + 0.5 * LOD_BLEND_WIDTH,
             length(position_scene)
         );
 
@@ -664,18 +727,73 @@ void main() {
             // shadow-map read onto Voxy in the band.
             shadows_near = is_lod ? vec3(1.0) : shadow_near;
 
+#ifdef SHADOW
+            // HAND: its deferred position is a synthetic point at the camera
+            // (combined depth stores 0 as the hand signal), inside the
+            // player's own shadow-map footprint - the terrain tap there reads
+            // whatever the bias escapes to, so the hand never tracks shade.
+            // Light it by the PLAYER's sun visibility instead: one probe at a
+            // fixed point sunward of the eye. The probe floats in open air
+            // (clear of the player model at any sun angle, no surface = no
+            // acne), so it is occluded exactly when something stands between
+            // the player and the sun.
+            if (is_hand) {
+                vec3 probe_clip = project_ortho(
+                    shadowProjection,
+                    transform(shadowModelView, light_dir * 0.75)
+                );
+                vec3 probe_screen
+                    = distort_shadow_space(probe_clip) * 0.5 + 0.5;
+                shadows_near = shadow_basic(probe_screen);
+            }
+#endif
+
             // FAR-MODEL inputs (screenspace), computed only for far-PICKED pixels (the
             // near model ignores them, so near picks skip the SSRT march). For vanilla
             // terrain the LoD buffer is empty here, so the march reads lit / no occlusion.
             if (pick_far) {
 #ifdef SHADOW_SSRT
+#ifdef LOD_MOD_ACTIVE
+                if (is_lod) {
+                    // ONE fixed-step march yields both the cast shadow and the
+                    // SSS burial fraction for LoD terrain (see
+                    // get_sss_screen_occlusion). The near-field contact-shadow
+                    // marcher (geometric steps, absolute thickness window)
+                    // aliases into stripes at LoD scale and must not run here.
+                    vec2 lod_light = get_sss_screen_occlusion(
+                        uv,
+                        position_view,
+                        depth,
+                        true,
+                        depth_lod
+                    );
+                    shadow_distant = lod_light.x;
+                    sss_screen_occlusion = lod_light.y;
+                    // Thin-surface baseline: the transmission is shaped by the
+                    // occlusion ray, not by a marched light path.
+                    sss_depth_distant = 0.0;
+                } else {
+                    // Vanilla far-field: lit (no LoD data to march; marching
+                    // the vanilla depth at far-field scale mass-shadows real
+                    // terrain relief). Transmission still gets the occlusion
+                    // ray against the combined depth.
+                    shadow_distant = 1.0;
+                    sss_depth_distant = 0.0;
+                    if (material.sss_amount > eps) {
+                        sss_screen_occlusion = get_sss_screen_occlusion(
+                            uv,
+                            position_view,
+                            depth,
+                            false,
+                            depth_lod
+                        ).y;
+                    }
+                }
+#else
                 shadow_distant = get_screen_space_shadows(
                     uv,
                     position_view,
                     depth,
-#ifdef LOD_MOD_ACTIVE
-                    depth_lod,
-#endif
                     light_levels.y,
                     material.sss_amount > eps,
                     sss_depth_distant
@@ -686,13 +804,9 @@ void main() {
                         uv,
                         position_view,
                         depth
-#ifdef LOD_MOD_ACTIVE
-                        ,
-                        is_lod,
-                        depth_lod
-#endif
-                    );
+                    ).y;
                 }
+#endif
 #else
                 shadow_distant = get_lightmap_shadows(light_levels.y);
 #endif
@@ -705,7 +819,8 @@ void main() {
             // perpendicular faces of THIS block, each contributing only if it was DRAWN
             // and by how much sun hit it). Near-PICKED, near-field geometry only: it reads
             // the shadow-pass face data / voxel volume, which LoD terrain isn't in.
-            // Cutout/plant materials (masks 2-5: small/tall plants, leaves; 14: thin
+            // Cutout/plant materials (masks 2-5: small/tall plants, leaves; 82/83/85:
+            // grass-shader split-outs of tall/short grass; 14: thin
             // strong-SSS) are skipped and keep their own per-fragment SSS - the rim is a SOLID-CUBE
             // model, and running it on plant geometry floating above its block leaked
             // shadow-map structure as banding "waves". For solid blocks it REPLACES the
@@ -716,8 +831,8 @@ void main() {
                 if (!pick_far
                     && !is_lod
                     && material.sss_amount > eps
-                    && (material_mask < 2u || material_mask > 5u)   // not plants/leaves
-                    && material_mask != 14u) {                      // thin strong-SSS -> own SSS
+                    && !is_thin_plant_mask(material_mask) // plants/grass -> own SSS
+                    && material_mask != 14u) {            // thin strong-SSS -> own SSS
                     vec3 block_center
                         = floor(position_world - flat_normal * 0.5) + 0.5;
                     ivec3 block_cell
@@ -1083,17 +1198,26 @@ void main() {
 #endif
 
 #ifdef BORDER_DEBUG
-        // TEMP: decompose terrain lighting to find the dark band at the near<->far
-        // border. Whichever channel darkens across the band is the responsible
-        // term.
-        //   R = cast shadow (shadow-map near-field / SSRT far-field); low = shadowed
-        //   G = NoL on the shading normal; low = facing from the sun, or a bad
-        //       reconstructed LoD normal
-        //   B = skylight level (light_levels.y); low = low sky access
+        // TEMP: stage-isolation decomposition for the LoD stripe hunt.
+        //   R = shadow value AS CONSUMED (shadows_far/near after every
+        //       multiply: fallbacks, light leak, ...); low = shadowed
+        //   G = raw Voxy lightmap sky level (light_levels.y)
+        //   B = FRESH raw march verdict, straight from the marcher with
+        //       nothing applied after it (LoD pixels only; 0.5 elsewhere)
+        // Stripes in B = the march itself (its input uniforms). Stripes in R
+        // but NOT B = the consumption chain between march and pixel. Stripes
+        // in G = the baked lightmap feeding fallbacks/ambient.
+        float dbg_raw_march = 0.5;
+#if defined SHADOW_SSRT && defined LOD_MOD_ACTIVE
+        if (is_lod) {
+            dbg_raw_march = get_sss_screen_occlusion(
+                uv, position_view, depth, true, depth_lod).x;
+        }
+#endif
         fragment_color = vec3(
             (pick_far ? shadows_far : shadows_near).x,
-            clamp01(dot(normal, light_dir)),
-            light_levels.y
+            light_levels.y,
+            dbg_raw_march
         );
 #endif
 

@@ -17,13 +17,6 @@
 
 #include "/include/global.glsl"
 
-// The End: Voxy's state there is unreliable (zero-size viewport logs;
-// displaced depth/projection reconstruction) — blend without LoD depth
-// handling in this world, matching c0_vl. See the note in c0_vl.fsh.
-#if defined WORLD_END && defined LOD_MOD_ACTIVE
-#undef LOD_MOD_ACTIVE
-#endif
-
 layout(location = 0) out vec3 fragment_color;
 
 /* RENDERTARGETS: 0 */
@@ -297,7 +290,15 @@ void main() {
     float front_depth_lod = texelFetch(lod_depth_tex, texel, 0).x;
     float back_depth_lod = texelFetch(lod_depth_tex_solid, texel, 0).x;
 
-    // Fix Voxy translucents appearing in front of entities.
+    // Voxy renders its translucent layer into colortex13 — the same buffer as
+    // vanilla translucents (water, glass, the enchantment glint). Where a nearer
+    // vanilla surface occludes a Voxy translucent, drop that stray Voxy write so
+    // it does not draw in front. Gate on a Voxy translucent layer actually being
+    // present here (front_depth_lod != back_depth_lod): opaque Voxy terrain
+    // writes colortex1, not colortex13, so testing merely "any Voxy geometry
+    // behind" would erase the vanilla glint wherever distant LoD terrain sits
+    // behind the surface. The hand is always the nearest thing, so its glint is
+    // never a stray Voxy contribution (back_depth >= hand_depth).
 #ifdef VOXY
     float z_vanilla
         = screen_to_view_space_depth(gbufferProjectionInverse, back_depth);
@@ -305,8 +306,8 @@ void main() {
         lod_projection_matrix_inverse,
         front_depth_lod
     );
-    if (front_depth_lod < 1.0 && z_vanilla < z_lod
-        && front_depth == back_depth) {
+    if (front_depth_lod != back_depth_lod && z_vanilla < z_lod
+        && front_depth == back_depth && back_depth >= hand_depth) {
         translucent_color = vec4(0.0);
     }
 #endif
@@ -333,20 +334,22 @@ void main() {
     fix_hand_depth(front_depth, front_is_hand);
     fix_hand_depth(back_depth, back_is_hand);
 
+    // LoD depths reconstruct via lod_screen_to_view_space - never the LoD
+    // projection's X/Y columns (degenerate in Voxy's End state - see
+    // space_conversion.glsl)
     vec3 front_position_screen
         = vec3(uv, front_is_lod_terrain ? front_depth_lod : front_depth);
-    vec3 front_position_view = screen_to_view_space(
-        front_position_screen,
-        true,
-        front_is_lod_terrain
-    );
+    vec3 front_position_view = front_is_lod_terrain
+        ? lod_screen_to_view_space(front_position_screen, true)
+        : screen_to_view_space(front_position_screen, true);
     vec3 front_position_scene = view_to_scene_space(front_position_view);
     vec3 front_position_world = front_position_scene + cameraPosition;
 
     vec3 back_position_screen
         = vec3(uv, back_is_lod_terrain ? back_depth_lod : back_depth);
-    vec3 back_position_view
-        = screen_to_view_space(back_position_screen, true, back_is_lod_terrain);
+    vec3 back_position_view = back_is_lod_terrain
+        ? lod_screen_to_view_space(back_position_screen, true)
+        : screen_to_view_space(back_position_screen, true);
     vec3 back_position_world
         = view_to_scene_space(back_position_view) + cameraPosition;
 
@@ -410,8 +413,7 @@ void main() {
         if (front_is_lod_terrain || lod_behind_translucent) {
             if (lod_behind_translucent) {
                 lod_position_screen = vec3(uv, front_depth_lod);
-                lod_position_view = screen_to_view_space(
-                    lod_projection_matrix_inverse,
+                lod_position_view = lod_screen_to_view_space(
                     lod_position_screen,
                     true
                 );
@@ -572,8 +574,15 @@ void main() {
         fragment_color += analytic_fog[0];
 
 #ifdef BLOOMY_FOG
+#if defined LPV_VL
+        // LPV fog buffers exist without VL; keep reading them
         bloomy_fog
             = clamp01(dot(fog_transmittance, vec3(luminance_weights_rec2020)));
+#else
+        // No fog buffers in this config - track the analytic fog instead
+        bloomy_fog
+            = clamp01(dot(analytic_fog[1], vec3(luminance_weights_rec2020)));
+#endif
         bloomy_fog = isEyeInWater == 1.0 ? sqrt(bloomy_fog) : bloomy_fog;
 #endif
 #else

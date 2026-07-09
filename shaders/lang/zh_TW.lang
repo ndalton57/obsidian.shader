@@ -263,7 +263,6 @@ option.BLOCKY_CLOUDS_SHARPNESS         = 銳利度
 option.BLOCKY_CLOUDS_SHARPNESS.comment = 調整雲邊緣銳利度
 
 option.CLOUDS_TEMPORAL_UPSCALING       = 時域升頻
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = 空氣透視強化
 option.CLOUDS_SCALE                    = 縮放比例
 option.CLOUDS_SCALE.comment            = 套用於所有雲層的縮放因子;1.0 為預設(第一層約 800 格高)，數值越大則雲越小、距離越近，並影響雲影大小
 suffix.CLOUDS_SCALE                    = ×

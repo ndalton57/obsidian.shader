@@ -16,11 +16,12 @@ const int noiseTextureResolution = 512;
 
 const bool shadowHardwareFiltering1 = true;
 const int shadowMapResolution       = 4096; // [1024 1536 2048 3072 4096 6144 8192 16384]
-// Locked to 256 (16 chunks) and hidden: the terrain lighting fork keys on
-// is_lod (vanilla MC = near-field, Voxy LoD = far-field), which
-// requires the shadow map to cover ALL vanilla terrain. With Voxy the vanilla
-// render distance stays <= 16 chunks, so this never strands vanilla terrain
-// without a shadow. Don't re-expose as a slider without revisiting that.
+// Live slider (screen.lighting). Safe at any value: the terrain-lighting fork
+// keys on min(shadowDistance, far) (d4 fork_border, shadows/common.glsl fade,
+// displacement.glsl), so vanilla terrain past the shadow range runs the same
+// far-field model as Voxy LoD (SSRT shadows + screenspace SSS) instead of
+// stranding shadowless on the near model. Lower values = sharper near shadows
+// from the same map resolution, with the far model taking over sooner.
 const float shadowDistance          = 256.0; // [128.0 160.0 192.0 224.0 256.0 320.0 384.0 448.0 512.0]
 const float shadowDistanceRenderMul = 1.0;
 const float shadowIntervalSize      = 2.0;
@@ -48,11 +49,12 @@ const float wetnessHalflife         = 70.0;
   //                overhead blocks; still can't see the camera's per-section culling).
   //   4 Race     - the first drawn face of a block CLAIMS it and grows (first-come; whichever
   //                face the GPU rasterises first wins, current-frame, no pop-out, no lag).
-  // Modes 2+ need Colored Lights. Default 4. See CLAUDE.md gotcha #9.
+  // Modes 2+ need Colored Lights. Default 4.
   #define PROCEDURAL_GEOMETRY_MODE 4 // [1 2 3 4]
   // Z-fight fix for grass-block sides: pushes the tessellated dirt base a hair behind the
   // flat green grass-overlay so the green fringe isn't eaten into brown. Depth-only,
-  // invisibly small, HARDCODED (not a menu option). See CLAUDE.md gotcha #12.
+  // invisibly small, HARDCODED (not a menu option). A LARGER bias over-pushes at
+  // distance and re-introduces the z-fight it fixes - keep it tiny.
   #define GRASS_OVERLAY_DEPTH_BIAS 0.000001
   #define GRASS_BASE_THICKNESS 0.3 // [0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
   #define GRASS_THICKNESS_FALLOFF 0.8 // [0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1.0]
@@ -314,7 +316,6 @@ const float wetnessHalflife         = 70.0;
 
   #define CLOUDS_TEMPORAL_UPSCALING 2 // [1 2 3 4]
   #define CLOUDS_SOFTNESS 1.0 // [0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]
-  #define CLOUDS_AERIAL_PERSPECTIVE_BOOST 1 // [0 1 2 3 4]
   #define CLOUDS_ACCUMULATION_LIMIT 20
   #define CLOUDS_SCALE 10.0 // [1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0]
 

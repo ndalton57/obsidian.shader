@@ -263,7 +263,6 @@ option.BLOCKY_CLOUDS_SHARPNESS         = Teravus
 option.BLOCKY_CLOUDS_SHARPNESS.comment = Pilve servade teravus
 
 option.CLOUDS_TEMPORAL_UPSCALING       = Ajutine üleskaalumine
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = Õhuperspektiivi võimendus
 option.CLOUDS_SCALE                    = Skaala
 option.CLOUDS_SCALE.comment            = Rakendatakse skaala tegurina kõikidele pilvedele, et tuua need realistlikust suurusest ja kõrgusest mängitavale tasemele. Kui see väärtus on 1.0, on pilvede asetus realistlik (esimene kiht asub vaikimisi 800 plokki üleval). Kui väärtus on suurem, ilmuvad pilved väiksemana ja lähemal maapinnale. See mõjutab ka pilvevarjude suurust
 suffix.CLOUDS_SCALE                    = ×

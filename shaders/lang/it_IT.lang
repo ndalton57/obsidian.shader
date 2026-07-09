@@ -261,7 +261,6 @@ option.BLOCKY_CLOUDS_SHARPNESS         = Affilatezza
 option.BLOCKY_CLOUDS_SHARPNESS.comment = Affilatezza dei bordi delle nuvole vanilla
 
 option.CLOUDS_TEMPORAL_UPSCALING       = Upscaling Temporale
-option.CLOUDS_AERIAL_PERSPECTIVE_BOOST = Aumento Prospettiva Aerea
 option.CLOUDS_SCALE                    = Scala Nuvole
 option.CLOUDS_SCALE.comment            = Applica una scala a tutte le nuvole, Per rendere le nuvole da dimensioni e altitudini realistiche ad accessibili nel gameplay. Se questo valore è 1.0, le nuvole sono in altitudine realistica, con il primo strato a 800 blocchi su dal terreno. Se il valore è maggiore, allora le nuvole appariranno più piccole e più lontane. questa opzione cambia pure le ombre delle nuvole
 suffix.CLOUDS_SCALE                    = ×

@@ -122,6 +122,22 @@ vec3 animate_vertex(
     float wind_speed = 0.3;
     float wind_strength = sqr(skylight) * (0.25 + 0.66 * rainStrength);
 
+    // Freeze the wind past the shadow-data border (where the far lighting model
+    // takes over): the far model's cast shadows are a screen-space march against
+    // the depth buffer, and wind-animated geometry there reads as
+    // frame-to-frame depth noise - visible flicker that TAA cannot resolve
+    // (wind is not in the motion vectors). Faded across the same band as the
+    // near/far fork; the motion is sub-pixel at that distance, and static
+    // geometry matches the LoD terrain beside it. Same idea as the water
+    // displacement fade above. Applies identically in the shadow pass, so the
+    // shadow-map imprint keeps matching the rendered geometry.
+    float fork_border = min(shadowDistance, far);
+    wind_strength *= 1.0 - smoothstep(
+        fork_border - 0.5 * LOD_BLEND_WIDTH,
+        fork_border + 0.5 * LOD_BLEND_WIDTH,
+        distance(world_pos, eyePosition)
+    );
+
     // Displace plants close to the player
     vec3 to_player = eyePosition - world_pos;
     vec3 player_displacement

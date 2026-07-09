@@ -112,9 +112,13 @@ bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
     // and force the bare/solid marker below - so a snow FIELD (interior layers mesh only their
     // non-corner top face) still registers. Same forced-marker pattern as small plants (gotcha #11).
     bool is_snow = block_id == 84u;
+    // Redstone wire (93): voxelized at ALL verts and stored with a forced
+    // marker below - its quad has both corner and inset vertices, so the
+    // corner test would race the cell every frame (gotcha #11 class).
+    bool is_redstone_wire = block_id == 93u;
 
     return (vertex_at_grid_corner || is_light_emitting_block || is_small_plant
-            || is_tall_grass || is_snow)
+            || is_tall_grass || is_snow || is_redstone_wire)
         && is_terrain && !is_transparent_block;
 }
 
@@ -170,6 +174,14 @@ void update_voxel_map(uint block_id) {
     block_id = block_id * (1u - is_warped_stem) + 46 * is_warped_stem;
     block_id = block_id * (1u - is_crimson_stem) + 58 * is_crimson_stem;
 
+    // Redstone wire (93) stores as 58 (the redstone-block emitter, so the LPV
+    // reuses its red light color). Forced SOLID below - one stable marker
+    // (its mixed corner/inset verts would otherwise race the cell, blinking
+    // the blades of the grass block under it), and solid means
+    // grass_air_above() reads the wire as cover: no blades through circuits.
+    bool is_redstone_wire = block_id == 93u;
+    block_id = is_redstone_wire ? 58u : block_id;
+
 #ifdef GLOWING_ORE
     // Glowing ores double as dim colored-light emitters: remap blocks
     // 86-92 into the second emitter ID range (96-102 -> light_color 32-38)
@@ -190,7 +202,8 @@ void update_voxel_map(uint block_id) {
     // forced the other way - always SOLID (bare id) so it covers the grass below. Both force a fixed
     // marker to dodge the per-vertex marker RACE (gotcha #11): their verts span the cell (corner +
     // non-corner) so a corner-test marker would flip the cell solid<->transparent every frame.
-    block_id = ((vertex_at_grid_corner && !small_plant) || is_snow_layer)
+    block_id = ((vertex_at_grid_corner && !small_plant) || is_snow_layer
+                || is_redstone_wire)
         ? block_id
         : clamp(block_id + 128u, 0u, 255u);
 
@@ -199,6 +212,7 @@ void update_voxel_map(uint block_id) {
     }
 }
 
+#ifdef SHADER_GRASS
 // Shader Grass: snapshot each grass-block TOP's biome tint (gl_Color) AND lightmap (block + sky)
 // + the shared grass_top atlas tile into camera-relative buffers, so the grass geometry shader can
 // colour AND light blades grown from ANY face with the real top values. The sun renders every top
@@ -253,6 +267,7 @@ void update_grass_tint(uint block_id) {
     vec2 tile_scale = abs(uv_minus_mid) * 2.0;
     imageStore(grass_tile_img, ivec2(0), vec4(tile_offset, tile_scale));
 }
+#endif
 
 // SSS leak fix: record which faces of each OPAQUE terrain block were actually DRAWN in
 // the shadow pass, as a per-block 6-bit mask stamped INWARD into the block's own cell.
@@ -270,7 +285,8 @@ void update_sss_faces(uint block_id) {
         || block_id == 30u || block_id == 80u   // water / transparent objects / misc
         || block_id == 2u || block_id == 85u || block_id == 82u || block_id == 83u // small/tall grass, plants
         || block_id == 3u || block_id == 4u      // tall plants (lower/upper)
-        || block_id == 5u;                       // leaves
+        || block_id == 5u                        // leaves
+        || block_id == 93u;                      // redstone wire (flat decal, never blocks the sun)
 
     if (is_non_occluder) {
         return;
@@ -304,7 +320,7 @@ void update_sss_faces(uint block_id) {
 
 // Shader Grass: record which faces of a grass block the shadow pass meshes, so the
 // election can require a side be CONFIRMED rendered instead of deducing it from the
-// neighbour voxel read (blind to fully-enclosed blocks - see CLAUDE.md). Each rendered
+// neighbour voxel read (blind to fully-enclosed blocks). Each rendered
 // grass-block face stamps the air cell it faces; the election reads block_center +
 // side_dir. Grass blocks within GRASS_RANGE only, to keep the write count down.
 // MODE 3 (Mask) ONLY: mode 4 (Race/FCFS) uses no shadow-pass mask at all - the grower is decided

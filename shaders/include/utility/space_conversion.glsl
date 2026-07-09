@@ -136,6 +136,35 @@ float view_to_screen_space_depth(mat4 projection_matrix, float depth) {
     return (zw.x / zw.y) * 0.5 + 0.5;
 }
 
+#ifdef LOD_MOD_ACTIVE
+// View-space position for a raw LoD-depth sample, touching only the Z rows of
+// the LoD projection: linearize with the LoD Z rows, re-encode against the
+// combined projection, unproject with the combined inverse (gbuffer X/Y).
+// The same encode->decode path as d2's combined depth buffer -> d4. The LoD
+// projection's X/Y columns must never be used for positions: Voxy's are
+// degenerate in the End, and reconstruct LoD geometry at displaced positions
+// that swim with the camera (ghost copies of islands in the fog).
+vec3 lod_screen_to_view_space(vec3 screen_pos, bool handle_jitter) {
+    float z_linear = screen_to_view_space_depth(
+        lod_projection_matrix_inverse,
+        screen_pos.z
+    );
+    float depth_combined = view_to_screen_space_depth(
+        combined_projection_matrix,
+        z_linear
+    );
+    return screen_to_view_space(
+        combined_projection_matrix_inverse,
+        vec3(screen_pos.xy, depth_combined),
+        handle_jitter
+    );
+}
+#else
+// No LoD mod: LoD depth samples cannot occur; keep call sites compiling
+#define lod_screen_to_view_space(screen_pos, handle_jitter) \
+    screen_to_view_space(gbufferProjectionInverse, screen_pos, handle_jitter)
+#endif
+
 vec3 view_to_scene_space(vec3 view_pos) {
     return transform(gbufferModelViewInverse, view_pos);
 }

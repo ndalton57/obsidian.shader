@@ -26,6 +26,26 @@ const ivec2[9] blur_kernel_offsets_3x3 = ivec2[9](
 const int shadow_map_res = int(float(shadowMapResolution) * MC_SHADOW_QUALITY);
 const float shadow_map_pixel_size = rcp(float(shadow_map_res));
 
+vec3 get_shadow_bias(vec3 scene_pos, vec3 normal, float NoL, float skylight) {
+    // Offset along the normal by the world-space footprint of one distorted
+    // shadow-map texel at this position. Texels coarsen as f^2/(1-S) toward
+    // the map edge, so the offset must grow the same way to keep the sample
+    // clear of its own texel's depth at every distance the map covers.
+    vec3 shadow_clip_pos
+        = project_ortho(shadowProjection, transform(shadowModelView, scene_pos));
+    float distortion_factor = get_distortion_factor(shadow_clip_pos.xy);
+    float texel_world_size = 2.0 * sqr(distortion_factor)
+        * rcp((1.0 - SHADOW_DISTORTION) * float(shadow_map_res)
+              * shadowProjection[0].x);
+
+    float magnitude = max(
+        0.25 * clamp01(0.12 + 0.01 * length(scene_pos)), // near-field floor
+        2.0 * texel_world_size
+    );
+
+    return normal * magnitude * (2.0 - clamp01(NoL));
+}
+
 vec2 blocker_search(vec3 scene_pos, float dither, bool has_sss) {
     int step_count = has_sss ? SSS_STEPS : 3;
 

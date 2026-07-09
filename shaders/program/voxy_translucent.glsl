@@ -155,7 +155,11 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
                   )
         * (float(int(parameters.face) & 1) * 2.0 - 1.0);
 
-    uint material_mask = max(parameters.customId - 10000u, 0u);
+    // customId < 10000 = block with no block.properties mapping -> mask 0
+    // (default material). Unsigned subtraction would wrap, not clamp.
+    uint material_mask = parameters.customId < 10000u
+        ? 0u
+        : parameters.customId - 10000u;
 
     // Get position
 
@@ -230,8 +234,9 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 #define shadow_distance_fade 0.0
 
 #ifdef CLOUD_SHADOWS
+    // Passed to get_diffuse_lighting, which applies it to the sun term;
+    // multiplying it into `shadows` as well would square it
     float cloud_shadows = get_cloud_shadows(colortex8, pos_scene);
-    shadows *= cloud_shadows;
 #endif
 
     fragment_color.rgb = get_diffuse_lighting(

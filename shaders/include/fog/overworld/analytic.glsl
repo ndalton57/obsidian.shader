@@ -18,12 +18,19 @@ vec2 air_fog_analytic_airmass(
     vec2 mul = -rcp(bedrock_fog_half_life());
     vec2 add = -mul * air_fog_falloff_start();
 
+    // A ray with y == 0.0 exactly makes this integral 0 * inf = NaN (a
+    // removable singularity). Snap y to +-eps - used in BOTH the numerator
+    // and denominator, this lands on the correct flat-ray limit
+    // (density(origin) * ray_length). Note sign()*eps would return 0 at 0.
+    float dir_y = ray_direction_world.y;
+    dir_y = abs(dir_y) < eps ? (dir_y < 0.0 ? -eps : eps) : dir_y;
+
     vec2 a = ray_origin_world.y * mul + add;
-    vec2 p1 = exp2(ray_length * ray_direction_world.y * mul + a);
+    vec2 p1 = exp2(ray_length * dir_y * mul + a);
     vec2 p2 = exp2(a);
 
     return clamp(
-               (p1 - p2) * rcp(log(2.0) * mul * ray_direction_world.y),
+               (p1 - p2) * rcp(log(2.0) * mul * dir_y),
                0.0,
                ray_length
            )
@@ -190,12 +197,16 @@ vec2 air_haze_airmass(
     const vec2 mul = -rcp(haze_half_life);
     const vec2 add = -mul * SEA_LEVEL;
 
+    // Same y == 0 NaN guard as air_fog_analytic_airmass above
+    float dir_y = ray_direction_world.y;
+    dir_y = abs(dir_y) < eps ? (dir_y < 0.0 ? -eps : eps) : dir_y;
+
     vec2 a = ray_origin_world.y * mul + add;
-    vec2 p1 = exp2(ray_length * ray_direction_world.y * mul + a);
+    vec2 p1 = exp2(ray_length * dir_y * mul + a);
     vec2 p2 = exp2(a);
 
     vec2 airmass = clamp(
-        (p1 - p2) * rcp(log(2.0) * mul * ray_direction_world.y),
+        (p1 - p2) * rcp(log(2.0) * mul * dir_y),
         0.0,
         ray_length
     );
