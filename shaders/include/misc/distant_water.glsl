@@ -4,7 +4,7 @@
 #include "/include/lighting/shadows/common.glsl"
 #include "/include/lighting/specular_lighting.glsl"
 #include "/include/misc/purkinje_shift.glsl"
-#include "/include/surface/water_normal.glsl"
+#include "/include/surface/water_waves.glsl"
 
 vec4 draw_distant_water(
     vec3 position_screen,
@@ -73,16 +73,16 @@ vec4 draw_distant_water(
 
 #ifdef WATER_WAVES
     if (flat_normal.y > eps) {
-        vec2 coord = -(water_surface_pos * tbn).xy;
-        normal = tbn
-            * get_water_normal(
-                     water_surface_pos,
-                     flat_normal,
-                     coord,
-                     vec2(0.0),
-                     light_levels.y,
-                     false
-            );
+        // Same wave field as the near surface (top face: tangent xy = world
+        // xz), so waves are continuous across the LoD border
+        vec3 wave_pos = vec3(water_surface_pos.xz, 0.0);
+        vec3 bump
+            = getWaveNormal(wave_pos, position_world - cameraPosition);
+
+        float bumpmult = WATER_WAVE_STRENGTH;
+        bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
+
+        normal = tbn * normalize(bump);
     }
 #endif
 

@@ -184,6 +184,30 @@ vec3 light_color, ambient_color;
 #include "/include/lighting/cloud_shadows.glsl"
 #endif
 
+#ifdef PROGRAM_GBUFFERS_WATER
+// Wave-field noise (image/cloud_noises.png via the Iris customTexture
+// sampler; see include/surface/water_waves.glsl)
+uniform sampler2D cloud_noisetex;
+#define CLOUD_NOISETEX cloud_noisetex
+#include "/include/surface/water_waves.glsl"
+
+#if WATER_INTERACTION == 1
+// Expanding wave ring at the point where the player entered/exited the water
+uniform vec3 waterEnteredPosition;
+uniform float waterEnteredTime;
+uniform vec3 waterEnteredVelocity;
+uniform vec3 waterExitedPosition;
+uniform float waterExitedTime;
+uniform vec3 waterExitedVelocity;
+#elif WATER_INTERACTION == 2
+// Interactive ripple simulation: the wave field is simulated around the
+// player by the prepare compute passes (program/p2_water_sim_a.csh); its
+// persistent state rides the WaterSimState buffer
+#include "/include/surface/water_sim_state.glsl"
+uniform sampler2D waveSim2Sampler;
+#endif
+#endif
+
 const float lod_bias = log2(taau_render_scale);
 
 #if TEXTURE_FORMAT == TEXTURE_FORMAT_LAB
@@ -455,38 +479,101 @@ void main() {
 
             vec3 world_pos = position_scene + cameraPosition;
 
-            vec2 coord = -(world_pos * tbn_fixed).xy;
+            // Wave-field sampling coords by face orientation: still tops
+            // sample world xz (the heightmap scrolls itself); non-horizontal
+            // faces scroll along the face's downhill/outward axis, so
+            // waterfalls and slopes flow. See water_waves.glsl for the field.
+            vec3 flowDir
+                = flat_normal * frameTimeCounter * 2.0 * WATER_WAVE_SPEED;
+            vec2 wave_coord = world_pos.xy + abs(flowDir.xz);
+            wave_coord = mix(
+                wave_coord,
+                world_pos.zy + abs(flowDir.zx),
+                clamp01(abs(flat_normal.x))
+            );
+            wave_coord
+                = mix(wave_coord, world_pos.xz, clamp01(abs(flat_normal.y)));
 
-            bool vertical_side = abs(flat_normal.y) < eps;
-            bool flowing_water = abs(flat_normal.y) < 0.99 || vertical_side;
-
-            vec2 flow_dir = vec2(0.0);
-            if (vertical_side) {
-                // Calculate downward direction in tangent space.
-                flow_dir = (vec3(0.0, 1.0, 0.0) * tbn_fixed).xy;
-            } else {
-                flow_dir
-                    = flowing_water ? normalize(flat_normal.xz) : vec2(0.0);
-            }
+            vec3 wave_pos = vec3(wave_coord, 0.0);
 
 #ifdef WATER_PARALLAX
             vec3 direction_tangent = direction_world * tbn_fixed;
-            coord = get_water_parallax_coord(
-                direction_tangent,
-                coord,
-                flow_dir,
-                flowing_water
-            );
+            wave_pos = getParallaxDisplacement(wave_pos, direction_tangent);
 #endif
 
-            normal_tangent = get_water_normal(
-                world_pos,
-                flat_normal,
-                coord,
-                flow_dir,
-                light_levels.y,
-                flowing_water
-            );
+            vec3 bump = getWaveNormal(wave_pos, position_scene);
+
+#if WATER_INTERACTION == 1
+            // nice little wave effect when entering/leaving water
+            vec3 waterPlayerPostion = waterExitedPosition;
+            float waterTime = waterExitedTime;
+            vec3 playerVelocity = waterExitedVelocity;
+            if (isEyeInWater == 1) {
+                waterPlayerPostion = waterEnteredPosition;
+                waterTime = waterEnteredTime;
+                playerVelocity = waterEnteredVelocity;
+            }
+
+            float distFromWaterPos = length(world_pos - waterPlayerPostion);
+            float maxWaveDist = 3.5;
+            if (distFromWaterPos < maxWaveDist) {
+                float newTime = frameTimeCounter - waterTime;
+                newTime *= 2.15;
+
+                float smoothDistFromWaterPos
+                    = smoothstep(maxWaveDist, 0.0, distFromWaterPos);
+                float waveWidth = 0.2;
+                float waveHeight
+                    = 0.3 * smoothstep(2.0, 20.0, length(playerVelocity))
+                    + 0.5;
+
+                float enterWave = waveHeight
+                    * smoothstep(newTime - waveWidth, newTime,
+                                 distFromWaterPos - 0.1)
+                    * smoothstep(newTime + waveWidth, newTime,
+                                 distFromWaterPos - 0.1)
+                    * smoothDistFromWaterPos;
+
+                bump.y = enterWave + (1.0 - enterWave) * bump.y;
+            }
+#elif WATER_INTERACTION == 2
+            // Interactive ripples: sample the simulated wave field pinned
+            // around the player. zw hold the surface gradient, x the
+            // pressure; ripple strength follows the pressure so calm water
+            // keeps its normal waves
+    #if WATER_SIM_DISTANCE == 1
+            const float NORMAL_SCALE = 0.04;
+    #elif WATER_SIM_DISTANCE == 2
+            const float NORMAL_SCALE = 0.02;
+    #elif WATER_SIM_DISTANCE == 3
+            const float NORMAL_SCALE = 0.015;
+    #else
+            const float NORMAL_SCALE = 0.01;
+    #endif
+
+            vec2 waveUV = (world_pos.xz - previousCameraPositionWave2.xz)
+                * NORMAL_SCALE;
+            if (length(waveUV) < 0.5 && abs(flat_normal.y) > 0.5
+                && !noSimOngoing) {
+                vec4 waves = texture(waveSim2Sampler, waveUV + 0.5);
+                vec3 waveNormals = normalize(vec3(waves.z, waves.w, 1.0));
+                bump = mix(
+                    bump,
+                    waveNormals,
+                    clamp(
+                        WATER_SIM_STRENGTH * sqrt(sqrt(abs(waves.x))),
+                        0.0,
+                        1.0
+                    )
+                );
+                bump = normalize(bump);
+            }
+#endif
+
+            float bumpmult = WATER_WAVE_STRENGTH;
+            bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
+
+            normal_tangent = normalize(bump);
             normal = tbn_fixed * normal_tangent;
         }
 #endif

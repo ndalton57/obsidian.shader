@@ -647,6 +647,34 @@ option.WATER_ABSORPTION_G_UNDERWATER   = §a▍ §fGreen Absorption - Underwater
 option.WATER_ABSORPTION_B_UNDERWATER   = §9▍ §fBlue Absorption - Underwater
 option.WATER_SCATTERING_UNDERWATER     = Scattering - Underwater
 
+option.WATER_ON_CAMERA_EFFECT          = Water On Camera
+option.WATER_ON_CAMERA_EFFECT.comment  = Screen effects when diving into and surfacing out of water: a splash on entry, droplets running down the screen on exit
+option.WATER_INTERACTION               = Water Interaction
+option.WATER_INTERACTION.comment       = How the water surface reacts to the player. Wave Ring: a single expanding ring on entry/exit. Ripple Simulation: a live wave simulation that ripples around you while walking, swimming or boating
+value.WATER_INTERACTION.0              = Off
+value.WATER_INTERACTION.1              = Wave Ring
+value.WATER_INTERACTION.2              = Ripple Simulation
+option.WATER_SIM_STRENGTH              = Ripple Strength
+option.WATER_SIM_STRENGTH.comment      = How strongly the simulated ripples bend the water surface
+option.WATER_SIM_SCALE                 = Ripple Resolution
+option.WATER_SIM_SCALE.comment         = Texel density of the ripple simulation. Higher is sharper but costs more
+value.WATER_SIM_SCALE.0                = Low
+value.WATER_SIM_SCALE.1                = Medium
+value.WATER_SIM_SCALE.2                = High
+option.WATER_SIM_DISTANCE              = Ripple Range
+option.WATER_SIM_DISTANCE.comment      = How far from the player the ripple simulation reaches
+option.WATER_SIM_FRAMERATE             = Ripple Framerate
+option.WATER_SIM_FRAMERATE.comment     = Update rate of the ripple simulation. 30 runs the wave step less often with a doubled step size
+option.WATER_WAVE_SPEED                = Wave Speed
+option.PATCHY_WAVE_BLEND               = Wave Patchiness
+option.PATCHY_WAVE_BLEND.comment       = Blend between uniform waves and large calm/rough patches across open water
+option.WAVES_A_RADIUS                  = Wave Detail (Calm)
+option.WAVES_A_RADIUS.comment          = Normal sampling radius in calm patches. Smaller = sharper detail
+option.WAVES_B_RADIUS                  = Wave Detail (Rough)
+option.WAVES_B_RADIUS.comment          = Normal sampling radius in rough patches. Smaller = sharper detail
+option.HYPER_DETAILED_WAVES            = Hyper Detailed Waves
+option.HYPER_DETAILED_WAVES.comment    = Maximum wave normal detail at any distance. Sharper but noisier
+
 # Post-processing settings
 
 option.BLOOM                           = Bloom

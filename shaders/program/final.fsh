@@ -21,6 +21,17 @@ in vec2 uv;
 
 uniform sampler2D colortex0; // Scene color
 
+#ifdef WATER_ON_CAMERA_EFFECT
+// Enter/exit water screen effects: droplets running down the screen after
+// surfacing, and a splash-zoom while submerging. Both build a distortion
+// mask that center-zooms the final image.
+uniform sampler2D cloud_noisetex;
+uniform float exitWater;  // 1 while underwater, 5s decay after surfacing
+uniform float enterWater; // ~1.5s ramp while entering, instant reset
+uniform int isEyeInWater;
+uniform float aspectRatio;
+#endif
+
 #if DEBUG_VIEW == DEBUG_VIEW_SAMPLER
 uniform sampler2D DEBUG_SAMPLER;
 #endif
@@ -267,6 +278,58 @@ void draw_iris_required_error_message() {
     end_text(fragment_color);
 }
 
+#ifdef WATER_ON_CAMERA_EFFECT
+void applyWaterOnCameraEffects(inout vec3 color, vec2 texcoord) {
+    float distortmask = 0.0;
+
+    if (exitWater > 0.0) {
+        vec3 scale = vec3(1.0, 1.0, 0.0);
+        bool eyeInWater = isEyeInWater == 1;
+        scale.xy = (eyeInWater
+                        ? vec2(0.3)
+                        : vec2(0.5, 0.25 + (exitWater * exitWater) * 0.25))
+            * vec2(aspectRatio, 1.0);
+        scale.z = eyeInWater ? 0.0 : exitWater;
+
+        // droplets scroll down as the exit timer decays
+        float waterDrops = texture(
+            cloud_noisetex,
+            (texcoord - vec2(0.0, scale.z)) * scale.xy
+        ).r;
+        if (eyeInWater) waterDrops = 0.0;
+        if (isEyeInWater == 0 && exitWater > 0.0) {
+            waterDrops = sqrt(min(
+                              max(waterDrops - (1.0 - sqrt(exitWater)) * 0.7,
+                                  0.0)
+                                  * (1.0 + exitWater),
+                              1.0
+                          ))
+                * 0.3;
+        }
+
+        distortmask = max(distortmask, waterDrops);
+    }
+    if (enterWater > 0.0) {
+        vec2 zoomTC
+            = 0.5 + (texcoord - 0.5) * (1.0 - (1.0 - sqrt(1.0 - enterWater)));
+        float waterSplash
+            = texture(cloud_noisetex, zoomTC * vec2(aspectRatio, 1.0)).r
+            * (1.0 - enterWater);
+
+        distortmask = max(distortmask, waterSplash);
+    }
+
+    // all of the distortion is based around zooming the UV in the center
+    vec2 zoomUV = 0.5 + (texcoord - 0.5) * (1.0 - distortmask);
+    vec3 distortedColor = display_eotf(
+        max0(catmull_rom_filter_fast_rgb(colortex0, zoomUV, 0.6))
+    );
+
+    // apply the distorted color, reverting back to normal when it ends
+    if (exitWater > 0.01) color = distortedColor;
+}
+#endif
+
 void main() {
 #if defined COLORED_LIGHTS && !defined IS_IRIS
     draw_iris_required_error_message();
@@ -282,6 +345,10 @@ void main() {
         fragment_color = catmull_rom_filter_fast_rgb(colortex0, uv, 0.6);
         fragment_color = display_eotf(fragment_color);
     }
+
+#ifdef WATER_ON_CAMERA_EFFECT
+    applyWaterOnCameraEffects(fragment_color, uv);
+#endif
 
     fragment_color = dither_8bit(fragment_color, bayer16(vec2(texel)));
 
