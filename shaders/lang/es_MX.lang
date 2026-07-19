@@ -46,7 +46,7 @@ screen.end_light_color                 = Color claro
 screen.end_ambient_color               = Color ambiental
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §epor nullptr
 value.INFO.1                           = §apor nullptr
 value.INFO.2                           = §bpor nullptr

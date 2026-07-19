@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/c0_vl:
   Calculate volumetric fog

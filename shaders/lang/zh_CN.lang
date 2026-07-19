@@ -46,7 +46,7 @@ screen.end_light_color                 = 末地光照颜色
 screen.end_ambient_color               = 末地环境光颜色
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §e作者: nullptr
 value.INFO.1                           = §a作者: nullptr
 value.INFO.2                           = §b作者: nullptr

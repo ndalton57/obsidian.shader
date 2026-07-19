@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/c20_motion_blur:
   Apply motion blur

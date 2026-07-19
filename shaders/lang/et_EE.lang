@@ -46,7 +46,7 @@ screen.end_light_color                 = Valguse värv
 screen.end_ambient_color               = Ümbritsev värv
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §eautor: nullptr
 value.INFO.1                           = §aautor: nullptr
 value.INFO.2                           = §bautor: nullptr

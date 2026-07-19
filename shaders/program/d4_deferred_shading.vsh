@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/d4_deferred_shading:
   Shade terrain and entities, draw sky

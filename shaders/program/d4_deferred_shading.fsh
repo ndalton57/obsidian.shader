@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/d4_deferred_shading:
   Shade terrain and entities, draw sky
@@ -832,7 +832,9 @@ void main() {
                     && !is_lod
                     && material.sss_amount > eps
                     && !is_thin_plant_mask(material_mask) // plants/grass -> own SSS
-                    && material_mask != 14u) {            // thin strong-SSS -> own SSS
+                    && material_mask != 14u               // thin strong-SSS -> own SSS
+                    && material_mask != 113u) {           // animals: never voxelized, no
+                                                          // faces for a rim -> own SSS
                     vec3 block_center
                         = floor(position_world - flat_normal * 0.5) + 0.5;
                     ivec3 block_cell

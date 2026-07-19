@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/p1_water_sim_tick.csh:
   Water ripple simulation - per-step bookkeeping: latches the all-calm flag,

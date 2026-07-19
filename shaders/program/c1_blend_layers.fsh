@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/c1_blend_layers
   Combine:
@@ -67,6 +67,7 @@ uniform sampler2D colortex1; // distant water gbuffer
 
 #ifdef VOXY
 uniform sampler2D colortex16; // distant water gbuffer 0
+uniform sampler2D colortex17; // Voxy translucent LoD color (own buffer, never 13)
 #endif
 
 uniform sampler2D depthtex0;
@@ -290,27 +291,16 @@ void main() {
     float front_depth_lod = texelFetch(lod_depth_tex, texel, 0).x;
     float back_depth_lod = texelFetch(lod_depth_tex_solid, texel, 0).x;
 
-    // Voxy renders its translucent layer into colortex13 — the same buffer as
-    // vanilla translucents (water, glass, the enchantment glint). Where a nearer
-    // vanilla surface occludes a Voxy translucent, drop that stray Voxy write so
-    // it does not draw in front. Gate on a Voxy translucent layer actually being
-    // present here (front_depth_lod != back_depth_lod): opaque Voxy terrain
-    // writes colortex1, not colortex13, so testing merely "any Voxy geometry
-    // behind" would erase the vanilla glint wherever distant LoD terrain sits
-    // behind the surface. The hand is always the nearest thing, so its glint is
-    // never a stray Voxy contribution (back_depth >= hand_depth).
-#ifdef VOXY
-    float z_vanilla
-        = screen_to_view_space_depth(gbufferProjectionInverse, back_depth);
-    float z_lod = screen_to_view_space_depth(
-        lod_projection_matrix_inverse,
-        front_depth_lod
-    );
-    if (front_depth_lod != back_depth_lod && z_vanilla < z_lod
-        && front_depth == back_depth && back_depth >= hand_depth) {
-        translucent_color = vec4(0.0);
-    }
-#endif
+    // Voxy translucents (water, ice, glass) render into their OWN buffer
+    // (colortex17) and composite below — NEVER into colortex13, which the
+    // additively-blended enchantment glint shares with the vanilla
+    // translucents: contributions summed there cannot be separated afterward,
+    // so any cull of a shared texel punches a glint hole that looks exactly
+    // like the leak it was meant to fix. Occlusion by vanilla terrain/walls
+    // is handled at the source (the depthtex1 test in voxy_translucent.glsl);
+    // occlusion by the HAND is handled at the composite below (the hand is
+    // not yet in any depth buffer when Voxy's pass runs, so only this pass
+    // can exclude it).
 
     bool front_is_lod_terrain = is_lod_terrain(front_depth, front_depth_lod);
     bool back_is_lod_terrain = is_lod_terrain(back_depth, back_depth_lod);
@@ -480,6 +470,21 @@ void main() {
                 ? lod_position_world
                 : back_position_world;
         }
+    }
+#endif
+
+#ifdef VOXY
+    // Voxy translucent LoD layer (colortex17): composite UNDER the vanilla
+    // translucent blend - Voxy is always the farthest translucent, so the
+    // vanilla water/glass and the glint (colortex13, below) draw over it.
+    // Skipped on the hand: the hand is absent from every depth buffer while
+    // Voxy renders, so this composite - which knows the hand - is the one
+    // place its occlusion can be honored. That skip is the whole reason this
+    // layer has its own buffer.
+    vec4 voxy_translucent_color = texelFetch(colortex17, texel, 0);
+    if (!front_is_hand && !back_is_hand) {
+        fragment_color = fragment_color * (1.0 - voxy_translucent_color.a)
+            + voxy_translucent_color.rgb;
     }
 #endif
 

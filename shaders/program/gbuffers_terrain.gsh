@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/gbuffers_terrain.gsh:
   Shader Grass. Geometry shader that turns grass into real
@@ -201,18 +201,43 @@ bool grass_top_reproduce(vec3 block_center, vec2 f_pos, out vec3 tint, out vec2 
 
 #ifdef SHADER_GRASS
 // Shader Grass: the baked decal-proximity field (filled by program/grass_bushiness.csh).
-// Per voxel cell: R = nearness to short_grass, G = nearness to tall_grass/large_fern. The
+// Per voxel cell: R = nearness to short_grass, G = nearness to tall_grass/large_fern,
+// B = nearness to a firefly bush, A = nearness to amethyst (the glow dyes). The
 // blade path reads it with one lookup instead of scanning the voxels per blade.
 uniform sampler3D grass_bushiness_sampler;
 
-// Baked decal influence at a cell (x = short_grass, y = tall_grass; 0 outside the volume).
-vec2 grass_bushiness_at(ivec3 cell) {
+// Baked decal influence at a cell (0 outside the volume).
+vec4 grass_bushiness_at(ivec3 cell) {
     if (any(lessThan(cell, ivec3(0)))
         || any(greaterThanEqual(cell, voxel_volume_size))) {
-        return vec2(0.0);
+        return vec4(0.0);
     }
-    return texelFetch(grass_bushiness_sampler, cell, 0).xy;
+    return texelFetch(grass_bushiness_sampler, cell, 0);
 }
+
+#ifdef GRASS_FLOWERS
+// Shader Grass: the baked flower dye field (same bake pass): rgb = the
+// strongest nearby bloom's petal tone, a = its falloff. Drives the per-blade
+// tip-dye probability.
+uniform sampler3D grass_flower_field_sampler;
+
+vec4 grass_flower_field_at(ivec3 cell) {
+    if (any(lessThan(cell, ivec3(0)))
+        || any(greaterThanEqual(cell, voxel_volume_size))) {
+        return vec4(0.0);
+    }
+    return texelFetch(grass_flower_field_sampler, cell, 0);
+}
+
+// Shader Grass: the baked stalk-spot lists (same bake pass): two rgba32ui
+// texels per cell = up to 8 packed spots landing on that cell's block
+// (valid 1 | x 8 | z 8 | k 6 | family 5 | flower offset 4). The bake derives
+// them ONCE per cell from every nearby flower's spot set; a grower
+// sub-triangle only tests its own block's few spots against its footprint -
+// re-deriving every nearby spot per BLADE cratered FPS in dense flower
+// fields.
+uniform usampler3D grass_flower_spots_sampler;
+#endif
 #endif
 #endif
 
@@ -344,11 +369,16 @@ void set_pom_defaults() {
 #endif
 }
 
+// Mask the blade emitters write. Small plants by default; the flower system
+// switches it per blade for GLOWING dyed tips (the deferred pass chroma-keys
+// emission off these masks) and resets it after each emit.
+uint blade_emit_mask = uint(MATERIAL_SMALL_PLANTS);
+
 void emit_blade_vertex(vec3 scene_p, vec2 vuv, vec4 vtint, vec2 vll, mat3 vtbn) {
     v_out.uv = vuv;
     v_out.scene_pos = scene_p;
     v_out.tint = vtint;
-    v_out.material_mask = uint(MATERIAL_SMALL_PLANTS);
+    v_out.material_mask = blade_emit_mask;
     v_out.tbn = vtbn;
     v_out.light_levels = vll;
     v_out.vanilla_ao = 1.0;
@@ -374,6 +404,23 @@ void emit_passthrough(bool grower) {
             v_out.material_mask = 6u;
         }
 #endif
+        // Flower masks exist for the voxel volume / flower-head growth; the
+        // flat plant itself shades as a small plant (small flowers) or a
+        // tall plant lower half (tall-flower lowers), unchanged (same
+        // pattern as short_grass in emit_short_grass_scaled).
+        if (v_out.material_mask >= uint(MATERIAL_FLOWER_FIRST)
+            && v_out.material_mask <= uint(MATERIAL_FLOWER_LAST)) {
+            v_out.material_mask = uint(MATERIAL_SMALL_PLANTS);
+        } else if (v_out.material_mask >= uint(MATERIAL_FLOWER_TALL_FIRST)
+                   && v_out.material_mask <= uint(MATERIAL_FLOWER_TALL_LAST)) {
+            v_out.material_mask = uint(MATERIAL_TALL_PLANTS_LOWER);
+        } else if (v_out.material_mask >= uint(MATERIAL_FLOWER_MAT_FIRST)
+                   && v_out.material_mask <= uint(MATERIAL_FLOWER_MAT_LAST)) {
+            v_out.material_mask = 14u; // their strong-SSS thin material
+        } else if (v_out.material_mask
+                   == uint(MATERIAL_FLOWER_FIREFLY_BUSH)) {
+            v_out.material_mask = uint(MATERIAL_SMALL_PLANTS);
+        }
         v_out.tbn = v_in[i].tbn;
         v_out.light_levels = v_in[i].light_levels;
         v_out.vanilla_ao = v_in[i].vanilla_ao;
@@ -386,7 +433,7 @@ void emit_passthrough(bool grower) {
         v_out.atlas_tile_offset = v_in[i].atlas_tile_offset;
         v_out.atlas_tile_scale = v_in[i].atlas_tile_scale;
 #endif
-        // Use the pipeline's clip position directly. Tachyon's vertex shader already
+        // Use the pipeline's clip position directly. Obsidian's vertex shader already
         // outputs clip space, and grass-block faces are planar, so this is correct
         // even for the tessellated sub-triangles and stays on the same depth path as
         // the rest of the terrain (re-projecting via grass_project() rounded depth
@@ -431,10 +478,19 @@ void emit_short_grass_scaled(float decal_height, float h) {
         sp.y = base_y + (sp.y - base_y) * scale; // pull the top toward the ground
         v_out.scene_pos = sp;
         v_out.tint = v_in[i].tint;
-        // Re-emit dedicated short_grass (85) as MATERIAL_SMALL_PLANTS (2) so the fragment shader's
-        // shading and cherry-grove recolor treat it exactly as before the material split.
+        // Re-emit dedicated short_grass (85) and the flower-colour masks as
+        // MATERIAL_SMALL_PLANTS (2) - and the ground mats as their strong-SSS
+        // material (14) - so the fragment shader's shading and cherry-grove
+        // recolor treat them exactly as before the material split.
         uint mm = v_in[i].material_mask;
-        v_out.material_mask = (mm == uint(MATERIAL_SHORT_GRASS)) ? uint(MATERIAL_SMALL_PLANTS) : mm;
+        bool remap_mm = mm == uint(MATERIAL_SHORT_GRASS)
+            || (mm >= uint(MATERIAL_FLOWER_FIRST)
+                && mm <= uint(MATERIAL_FLOWER_LAST));
+        bool remap_mat = mm >= uint(MATERIAL_FLOWER_MAT_FIRST)
+            && mm <= uint(MATERIAL_FLOWER_MAT_LAST);
+        v_out.material_mask = remap_mm
+            ? uint(MATERIAL_SMALL_PLANTS)
+            : (remap_mat ? 14u : mm);
         v_out.tbn = v_in[i].tbn;
         v_out.light_levels = v_in[i].light_levels;
         v_out.vanilla_ao = v_in[i].vanilla_ao;
@@ -448,8 +504,13 @@ void emit_short_grass_scaled(float decal_height, float h) {
 // Build one tapered, curved, waving blade. `root` is the scene-space base (used
 // to build/project the vertices); `world_root` is the PRECISE world-space base
 // (used only to drive the wind, so it stays stable as the camera moves).
+// `tip_tint`/`tip_amt`: optional colour wash on the blade TIP - the flower
+// colour bleed onto a bloom's neighbouring blades. Zero below the top
+// GRASS_FLOWER_BLEED_TOP fraction of the blade, then a linear 0 -> full ramp
+// to the tip, so roots and mid-blade stay untouched. amt 0 = off.
 void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
-                vec4 src_tint, vec2 guv, vec2 gll, vec3 wind_blade) {
+                vec4 src_tint, vec2 guv, vec2 gll, vec3 wind_blade,
+                vec3 tip_tint, float tip_amt) {
     for (int s = 0; s <= BLADE_SEGMENTS; ++s) {
         float tt = float(s) / float(BLADE_SEGMENTS);
         float curve = tt * tt; // bend more toward the tip
@@ -470,6 +531,11 @@ void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
         float heightfade = smoothstep(-0.35, 1.0, tt);
         vec4 col = src_tint;
         col.rgb *= heightfade;
+        col.rgb = mix(
+            col.rgb,
+            tip_tint,
+            tip_amt * linear_step(1.0 - GRASS_FLOWER_BLEED_TOP, 1.0, tt)
+        );
 
         if (s == BLADE_SEGMENTS) {
             emit_blade_vertex(center, guv, col, gll, btbn); // taper to a tip
@@ -480,6 +546,241 @@ void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
     }
     EndPrimitive();
 }
+
+#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+// Map a position onto the block-top's [0,1]^2 f-space - the SAME relabel
+// rules the blade placement uses (see the centroid mapping in main), so a
+// stalk point can be tested against a sub-triangle's real f-space footprint.
+vec2 grass_flower_top_map(vec3 p, vec3 bmin, vec3 n) {
+    float xl = p.x - bmin.x;
+    float yl = p.y - bmin.y;
+    float zl = p.z - bmin.z;
+    vec3 an = abs(n);
+    float fx, fz;
+    if (an.y > 0.5) {
+        if (n.y > 0.0) {
+            fx = zl;
+            fz = xl;
+        } else {
+            fx = zl;
+            fz = 1.0 - xl;
+        }
+    } else {
+        fx = yl;
+        if (an.x > 0.5) {
+            fz = (n.x > 0.0) ? zl : (1.0 - zl);
+        } else {
+            fz = (n.z > 0.0) ? (1.0 - xl) : xl;
+        }
+    }
+    return clamp(vec2(fx, fz), 0.0, 1.0);
+}
+
+float grass_flower_cross2(vec2 a, vec2 b) { return a.x * b.y - a.y * b.x; }
+
+// The stalk-spot POSITIONS are baked per cell by grass_bushiness.csh (see
+// bake_spot_radius there for the distribution: the inverse CDF of the dye
+// falloff as an area density); this shader only tests its block's baked
+// spots and recomputes their hashes.
+
+// True if f-space point sp lies inside the triangle (e0, e1, e2), either
+// winding. Inclusive edges: a point on a shared tessellation edge may emit
+// from both neighbours for a frame (two identical quads), which is invisible;
+// an exclusive test would instead drop the head there (a visible blink).
+bool grass_flower_contains(vec2 e0, vec2 e1, vec2 e2, vec2 sp) {
+    float c0 = grass_flower_cross2(e1 - e0, sp - e0);
+    float c1 = grass_flower_cross2(e2 - e1, sp - e1);
+    float c2 = grass_flower_cross2(e0 - e2, sp - e2);
+    return (c0 >= 0.0 && c1 >= 0.0 && c2 >= 0.0)
+        || (c0 <= 0.0 && c1 <= 0.0 && c2 <= 0.0);
+}
+
+// Stalk stem variant of emit_blade: ends in a PAIR (flat top, hidden behind
+// the head disc) instead of tapering to a needle tip - the tip poked past the
+// head and read as a floating spike - and keeps a minimum width the whole way
+// up, slightly wider than a blade. A flower stalk, not a grass blade.
+void emit_stem(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
+               vec4 stint, vec2 guv, vec2 gll, vec3 wind_blade) {
+    for (int s = 0; s <= BLADE_SEGMENTS; ++s) {
+        float tt = float(s) / float(BLADE_SEGMENTS);
+        float curve = tt * tt;
+
+        vec3 wind = wind_blade * curve;
+        vec3 center = root + vec3(0.0, bh * tt, 0.0) + lean * curve + wind;
+
+        float w = GRASS_HALF_WIDTH * 1.15
+            * max(1.0 - tt * GRASS_THICKNESS_FALLOFF, 0.45);
+
+        vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
+        mat3 btbn = mat3(right, normalize(cross(nrm, right)), nrm);
+
+        float heightfade = smoothstep(-0.35, 1.0, tt);
+        vec4 col = stint;
+        col.rgb *= heightfade;
+
+        emit_blade_vertex(center - right * w, guv, col, gll, btbn);
+        emit_blade_vertex(center + right * w, guv, col, gll, btbn);
+    }
+    EndPrimitive();
+}
+
+// FALLBACK bloom colour per flower family (sRGB) - used only when the flower's
+// real sprite colours were not captured this frame (outside the shadow range);
+// see update_flower_palette in voxelization.glsl for the capture.
+vec3 flower_palette(uint family) {
+    if (family == uint(MATERIAL_FLOWER_RED)) {
+        return vec3(0.80, 0.10, 0.06);
+    }
+    if (family == uint(MATERIAL_FLOWER_YELLOW)) {
+        return vec3(0.96, 0.80, 0.14);
+    }
+    if (family == uint(MATERIAL_FLOWER_BLUE)) {
+        return vec3(0.28, 0.42, 0.92);
+    }
+    if (family == uint(MATERIAL_FLOWER_PURPLE)) {
+        return vec3(0.78, 0.48, 0.90);
+    }
+    return vec3(0.96, 0.95, 0.90); // white
+}
+
+// Bloom tones for the flower at `flower_cell` (scene-space centre of the
+// flower's block): the REAL sprite colours captured by the shadow pass
+// (update_flower_palette). Brightest probe = petal tone; darkest VALID probe
+// = ring tone - near-black sprite outline texels, near-flat captures and
+// OFF-HUE candidates (a white flower's yellow eye) synthesize a shade of the
+// petal colour instead. Family palette when uncaptured.
+void grass_flower_tones(vec3 flower_cell, uint family, out vec3 light,
+                        out vec3 dark) {
+    light = flower_palette(family);
+    dark = light * 0.62;
+    vec3 fvp = scene_to_grass_tint_space(flower_cell);
+    if (any(lessThan(fvp, vec3(0.0)))
+        || any(greaterThanEqual(fvp, vec3(float(GRASS_TINT_SIZE))))) {
+        return;
+    }
+    ivec3 fc = ivec3(fvp);
+    ivec2 fb = ivec2(fc.x * 2, fc.z * 2);
+    vec3 c00 = texelFetch(grass_tint_sampler, ivec3(fb.x, fb.y, fc.y), 0).rgb;
+    vec3 c10
+        = texelFetch(grass_tint_sampler, ivec3(fb.x + 1, fb.y, fc.y), 0).rgb;
+    vec3 c01
+        = texelFetch(grass_tint_sampler, ivec3(fb.x, fb.y + 1, fc.y), 0).rgb;
+    vec3 c11 = texelFetch(grass_tint_sampler, ivec3(fb.x + 1, fb.y + 1, fc.y),
+                          0).rgb;
+    if (dot(c00 + c10 + c01 + c11, vec3(1.0)) <= 1e-3) {
+        return;
+    }
+
+    const vec3 lw = vec3(0.2126, 0.7152, 0.0722);
+    float l00 = dot(c00, lw);
+    float l10 = dot(c10, lw);
+    float l01 = dot(c01, lw);
+    float l11 = dot(c11, lw);
+
+    vec3 cmax = c00;
+    float lmax = l00;
+    if (l10 > lmax) { lmax = l10; cmax = c10; }
+    if (l01 > lmax) { lmax = l01; cmax = c01; }
+    if (l11 > lmax) { lmax = l11; cmax = c11; }
+
+    vec3 cmin = c00;
+    float lmin = l00;
+    if (l10 < lmin) { lmin = l10; cmin = c10; }
+    if (l01 < lmin) { lmin = l01; cmin = c01; }
+    if (l11 < lmin) { lmin = l11; cmin = c11; }
+
+    light = cmax;
+    bool off_hue
+        = dot(normalize(cmin + 1e-4), normalize(cmax + 1e-4)) < 0.80;
+    dark = (max_of(cmin) < 0.15 || lmax - lmin < 0.06 || off_hue)
+        ? light * 0.62
+        : cmin;
+}
+
+// Multicolor ground mats (wildflowers, pink_petals): a MIX of bloom colours
+// in one block, so each head takes ONE colour of a CURATED sprite-matched
+// palette - a patch then shows the mat's full colour array head by head.
+// Curated instead of captured: the multi-segment flowerbed models write the
+// capture slots from every segment's quads, and those racing writes made the
+// palette - and the heads - flicker each frame.
+bool flower_is_multicolor(uint raw_id) {
+    return raw_id >= uint(MATERIAL_FLOWER_MAT_FIRST)
+        && raw_id <= uint(MATERIAL_FLOWER_MAT_LAST);
+}
+
+void grass_flower_tone_pick(uint raw_id, float pick,
+                            out vec3 light, out vec3 dark) {
+    int i = clamp(int(pick * 4.0), 0, 3);
+    if (raw_id >= uint(MATERIAL_FLOWER_MAT_PETALS_FIRST)) {
+        // pink_petals: shades of its pinks
+        light = i == 0 ? vec3(0.97, 0.60, 0.76)
+            : i == 1   ? vec3(0.99, 0.80, 0.88)
+            : i == 2   ? vec3(0.93, 0.45, 0.66)
+                       : vec3(0.99, 0.92, 0.95);
+    } else {
+        // wildflowers: golden through cream
+        light = i == 0 ? vec3(0.98, 0.83, 0.18)
+            : i == 1   ? vec3(0.99, 0.93, 0.45)
+            : i == 2   ? vec3(0.95, 0.65, 0.12)
+                       : vec3(0.99, 0.88, 0.62);
+    }
+    dark = light * 0.62;
+}
+
+// One camera-facing head quad at a stalk tip. Full screen-aligned billboard
+// (vertical axis from the view direction, not world up) so the disc stays
+// round from any pitch - the petal shape is radially symmetric, so billboard
+// roll is invisible. Local quad coords ride v_out.uv ([-1,1]^2, pre-rotated
+// per head by `rot` so every head's petal pattern sits at its own angle);
+// tint.rgb is the petal tone and tint.a the ring tone packed 5:5:5 (see
+// gbuffers_all_solid.fsh).
+void emit_flower_head(vec3 center, vec3 right, uint family_mask,
+                      vec4 head_tint, vec2 gll, float half_size, float rot) {
+    // CAMERA-PLANE basis (the camera's own right/up rows), NOT a per-head
+    // view-direction basis: a per-head basis re-orients as the camera
+    // translates, visibly spinning the petal pattern while walking toward a
+    // head. The camera rows are constant across a frame, so translation
+    // cannot rotate the pattern; the disc is round, so its silhouette never
+    // reveals the basis either way.
+    mat3 vm = mat3(gbufferModelView);
+    vec3 cam_right = vec3(vm[0].x, vm[1].x, vm[2].x);
+    vec3 cam_up = vec3(vm[0].y, vm[1].y, vm[2].y);
+
+    // Same lighting normal recipe as the blades (mostly-up), so heads shade
+    // consistently with the canopy around them.
+    vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
+    mat3 htbn = mat3(right, normalize(cross(nrm, right)), nrm);
+
+    float rc = cos(rot);
+    float rs = sin(rot);
+    mat2 rmat = mat2(rc, -rs, rs, rc);
+
+    for (int i = 0; i < 4; ++i) {
+        vec2 corner = vec2(
+            (i & 1) == 0 ? -1.0 : 1.0,
+            (i & 2) == 0 ? -1.0 : 1.0
+        );
+        vec3 p = center
+            + (cam_right * corner.x + cam_up * corner.y) * half_size;
+
+        v_out.uv = rmat * corner;
+        v_out.scene_pos = p;
+        v_out.tint = head_tint;
+        v_out.material_mask = family_mask;
+        v_out.tbn = htbn;
+        v_out.light_levels = gll;
+        v_out.vanilla_ao = 1.0;
+#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+        v_out.block_center = vec3(0.0);
+#endif
+        set_pom_defaults();
+        gl_Position = grass_project(p);
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+#endif
 
 void main() {
     vec3 p0 = v_in[0].scene_pos;
@@ -574,6 +875,40 @@ void main() {
         emit_short_grass_scaled(1.0, h); // natural tall-grass height, cross-fade with distance
         return;
     }
+
+#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+    // Family-mask small flowers AND the multicolor ground mats (wildflowers,
+    // pink_petals) are REPLACED by the grown heads on grass blocks - hide the
+    // flat geometry with the same distance cross-fade the short/tall grass
+    // replacements use. On dirt/podzol (no blades, no stalk) it stays.
+    uint fmm = v_in[0].material_mask;
+    if ((fmm >= uint(MATERIAL_FLOWER_FIRST)
+         && fmm <= uint(MATERIAL_FLOWER_LAST))
+        || (fmm >= uint(MATERIAL_FLOWER_MAT_FIRST)
+            && fmm <= uint(MATERIAL_FLOWER_MAT_LAST))) {
+        float h = 1.0;
+        // Un-waved lookup (see the tall-grass block above)
+        vec3 fq0 = v_in[0].rest_scene_pos;
+        vec3 fq1 = v_in[1].rest_scene_pos;
+        vec3 fq2 = v_in[2].rest_scene_pos;
+        vec3 fbase = vec3(
+            (fq0.x + fq1.x + fq2.x) * (1.0 / 3.0),
+            min(fq0.y, min(fq1.y, fq2.y)),
+            (fq0.z + fq1.z + fq2.z) * (1.0 / 3.0)
+        );
+        if (grass_read_voxel(fbase - vec3(0.0, 0.4, 0.0))
+            == uint(MATERIAL_GRASS_BLOCK)) {
+            h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8,
+                           length(fbase));
+            if (h < 0.02) {
+                return; // fully replaced by the stalk + head
+            }
+        }
+        emit_short_grass_scaled(1.0, h);
+        return;
+    }
+#endif
 #endif
     // Cutout: short_grass (greenish, ~vertical) is re-emitted at the short-grass decal height; when
     // it sits on a GRASS BLOCK it also SHRINKS to 0 with distance to cross-fade into the block-top
@@ -765,6 +1100,16 @@ void main() {
 
     // Grass-block tops: tall, thin blades (density comes from tessellation).
     float height = 0.65 * BASE_GRASS_HEIGHT;
+#if defined GRASS_FLOWERS
+    // Baked flower dye field at this blade: falloff (bloom proximity, same
+    // shape as the grass heights) + the bloom's petal tone. Drives the
+    // per-blade dye roll and gates the stalk-spot lookup. The glow-source
+    // proximities ride the bushiness field's spare channels.
+    float flower_dye_falloff = 0.0;
+    vec3 flower_dye_color = vec3(0.0);
+    float firefly_prox = 0.0;
+    float amethyst_prox = 0.0;
+#endif
 #if defined COLORED_LIGHTS && defined SHADER_GRASS
     // Bushiness / tall grass: lift the blade where short_grass or tall_grass sits nearby.
     // The whole spread is BAKED per voxel cell by program/grass_bushiness.csh (R = short_grass
@@ -779,7 +1124,7 @@ void main() {
         vec2 fxz = vp.xz - 0.5;          // cell-CENTRE alignment for the interpolation
         ivec2 i0 = ivec2(floor(fxz));
         vec2 f = fract(fxz);
-        vec2 infl = mix(
+        vec4 infl = mix(
             mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y)),
                 grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y)), f.x),
             mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y + 1)),
@@ -790,6 +1135,49 @@ void main() {
         float lift = max((SHORT_GRASS_HEIGHT - 1.0) * infl.x,
                          (TALL_GRASS_HEIGHT - 1.0) * infl.y);
         height *= 1.0 + lift;
+
+#ifdef GRASS_FLOWERS
+        // Flower dye field, same 4-corner read on the same decal layer. The
+        // FALLOFF (how many blades take dye) blends bilinearly - a smooth
+        // density ramp. The COLOUR does NOT: each blade PICKS one corner
+        // cell's tone, weighted by that corner's share of the old numeric
+        // blend, so where clusters of different colours touch, neighbouring
+        // blades interleave the PURE cluster colours (the cherry-grove
+        // dither discipline) and the washes coexist seamlessly - averaging
+        // the tones instead drifted every seam toward the same muddy brown.
+        vec4 d00 = grass_flower_field_at(ivec3(i0.x,     vy, i0.y));
+        vec4 d10 = grass_flower_field_at(ivec3(i0.x + 1, vy, i0.y));
+        vec4 d01 = grass_flower_field_at(ivec3(i0.x,     vy, i0.y + 1));
+        vec4 d11 = grass_flower_field_at(ivec3(i0.x + 1, vy, i0.y + 1));
+        vec4 dye = mix(mix(d00, d10, f.x), mix(d01, d11, f.x), f.y);
+        flower_dye_falloff = dye.a;
+        if (dye.a > 1e-3) {
+            // Corner weights: bilinear weight x that cell's own falloff -
+            // exactly each corner's contribution to the bilinear tone, so
+            // the aggregate of picked colours matches the old blend
+            vec4 w = vec4(
+                (1.0 - f.x) * (1.0 - f.y) * d00.a,
+                f.x * (1.0 - f.y) * d10.a,
+                (1.0 - f.x) * f.y * d01.a,
+                f.x * f.y * d11.a
+            );
+            // Stable quantized-world key (cherry-dither discipline), its own
+            // stream - decorrelated from the dye roll's key below
+            ivec2 pick_key = cameraPositionInt.xz * 64
+                + ivec2(floor((clump.xz + cameraPositionFract.xz) * 64.0))
+                + ivec2(97, 31);
+            float pick = grass_hash2(pick_key).x * (w.x + w.y + w.z + w.w);
+            vec4 c = pick < w.x ? d00
+                : pick < w.x + w.y       ? d10
+                : pick < w.x + w.y + w.z ? d01
+                                         : d11;
+            // Renormalize the picked cell's premultiplied tone alone -
+            // full-strength pure colour, never a mix of cells
+            flower_dye_color = c.a > 1e-3 ? c.rgb / c.a : vec3(0.0);
+        }
+        firefly_prox = infl.z;
+        amethyst_prox = infl.w;
+#endif
     }
 #endif
     // Smooth LOD fade near GRASS_RANGE: blades shrink to nothing instead of
@@ -815,6 +1203,86 @@ void main() {
     vec2 player_dir = player_h > 1e-3 ? from_player.xz / player_h : vec2(0.0);
     vec3 player_push
         = vec3(player_dir.x, 0.0, player_dir.y) * player_prox * 0.35;
+
+#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+    // Flower stalks scatter RADIALLY around each bloom (pow-shaped radius,
+    // the same falloff spirit as the bushiness heights), so a flower reads
+    // as a cluster fading outward. The spots themselves are BAKED once per
+    // cell by grass_bushiness.csh - re-deriving every nearby flower's whole
+    // spot list per BLADE cratered FPS in dense fields - so the claim here
+    // is one texel-pair fetch plus a few footprint tests. The sub-triangle
+    // whose f-space footprint contains a spot grows the stalk in place of
+    // its blade; hashes are recomputed from the packed flower coordinate +
+    // k, identical to the values the old in-place derivation produced.
+    bool grow_head = false;
+    vec3 stalk_root = vec3(0.0);
+    vec2 stalk_hash = vec2(0.0);
+    uint stalk_family = 0u;
+    uint stalk_raw = 0u;
+    float stalk_pick = 0.0;
+    vec3 stalk_flower_cell = vec3(0.0);
+    if (flower_dye_falloff > 1e-3) {
+        vec3 fbmin = bc - 0.5;
+        vec2 e0 = grass_flower_top_map(p0, fbmin, v_in[0].tbn[2]);
+        vec2 e1 = grass_flower_top_map(p1, fbmin, v_in[0].tbn[2]);
+        vec2 e2 = grass_flower_top_map(p2, fbmin, v_in[0].tbn[2]);
+        vec3 sp_vp = scene_to_voxel_space(bc + vec3(0.0, 1.0, 0.0));
+        if (is_inside_voxel_volume(sp_vp)) {
+            ivec3 sp_cell = ivec3(sp_vp);
+            for (int t = 0; t < 2 && !grow_head; ++t) {
+                uvec4 slots = texelFetch(
+                    grass_flower_spots_sampler,
+                    ivec3(sp_cell.x * 2 + t, sp_cell.y, sp_cell.z), 0
+                );
+                for (int c = 0; c < 4; ++c) {
+                    uint s = slots[c];
+                    if ((s & 0x80000000u) == 0u) {
+                        break; // slots fill in order; first empty ends it
+                    }
+                    vec2 sp_local = vec2(
+                        float((s >> 23) & 255u),
+                        float((s >> 15) & 255u)
+                    ) * (1.0 / 255.0);
+                    // The footprint verts live in the top-relabelled
+                    // f-space (fx = local z, fz = local x) - transpose
+                    if (!grass_flower_contains(e0, e1, e2, sp_local.yx)) {
+                        continue;
+                    }
+                    int k = int((s >> 9) & 63u);
+                    uint fam_raw = 104u + ((s >> 4) & 31u);
+                    int ndx = int(s & 15u);
+                    vec3 n_bc = bc
+                        + vec3(float(ndx / 3 - 1), 0.0, float(ndx % 3 - 1));
+                    ivec2 ffk = cameraPositionInt.xz
+                        + ivec2(floor(n_bc.xz + cameraPositionFract.xz));
+
+                    grow_head = true;
+                    stalk_root = vec3(fbmin.x + sp_local.x, bc.y + 0.5,
+                                      fbmin.z + sp_local.y);
+                    stalk_hash = grass_hash2(
+                        ffk * 13 + ivec2(k * 17 + 5, k * 29 + 3));
+                    stalk_pick = grass_hash2(
+                        ffk * 19 + ivec2(k * 23 + 11, k * 41 + 7)).x;
+                    // Tall lowers / ground blooms grow heads in their base
+                    // family; the multicolor mats use fixed petal SHAPES
+                    // (wildflowers daisy-like, petals a 4-petal blossom)
+                    // with per-head colours from their curated palette
+                    stalk_family = flower_base_family(fam_raw);
+                    if (flower_is_multicolor(fam_raw)) {
+                        stalk_family
+                            = fam_raw >= uint(MATERIAL_FLOWER_MAT_PETALS_FIRST)
+                            ? uint(MATERIAL_FLOWER_RED)
+                            : uint(MATERIAL_FLOWER_WHITE);
+                    }
+                    stalk_raw = fam_raw;
+                    stalk_flower_cell = n_bc + vec3(0.0, 1.0, 0.0);
+                    break;
+                }
+            }
+        }
+    }
+#endif
 
     for (int b = 0; b < BLADE_COUNT; ++b) {
         // Tessellation supplies density (one blade per sub-triangle); ALL the
@@ -858,8 +1326,147 @@ void main() {
         vec3 wind_blade
             = grass_wave(world_root, gll.y, phase_jitter, amp_jitter);
 
-        emit_blade(root, world_root, bh, right, lean, src_tint, guv, gll,
-                   wind_blade);
+#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+        if (grow_head) {
+            // The claimed stalk grows at ITS OWN world-anchored spot (in
+            // place of this sub-triangle's blade), and every parameter -
+            // rest lean, height noise, wind - derives from that spot, not
+            // from the drifting sub-triangle position. `height` (bushiness +
+            // range fade) is the block's own smooth field, so reusing the
+            // invocation's value cannot pop.
+            vec3 s_root = stalk_root;
+            vec3 s_world = s_root + (stable_world - clump);
+
+            vec2 s_rnd = 2.0
+                    * (texture(noisetex, 0.75 * s_world.xz).xy
+                       + texture(noisetex, 0.35 * s_world.xz.yx).xy)
+                - 1.0;
+            float s_hgt = texture(noisetex, s_world.xz * 0.29 + 0.53).y;
+
+            vec3 s_view = normalize_safe(s_root);
+            vec3 s_raxis = cross(s_view, vec3(0.0, 1.0, 0.0));
+            vec3 s_right = length(s_raxis) > 1e-3 ? normalize(s_raxis)
+                                                  : vec3(1.0, 0.0, 0.0);
+
+            // Straighter than a blade, still parted by the player
+            vec3 s_from_player = s_root + relativeEyePosition;
+            float s_ph = length(s_from_player.xz);
+            float s_prox = smoothstep(1.0, 0.15, s_ph)
+                * smoothstep(3.0, 0.5, abs(s_from_player.y));
+            vec2 s_pdir
+                = s_ph > 1e-3 ? s_from_player.xz / s_ph : vec2(0.0);
+            vec3 s_lean = vec3(s_rnd.x, 0.0, s_rnd.y) * GRASS_RANDOMNESS
+                    * 0.35 * 0.4
+                + vec3(s_pdir.x, 0.0, s_pdir.y) * s_prox * 0.35;
+
+            vec3 s_wind = grass_wave(s_world, gll.y, (s_rnd - 1.0) * 0.6,
+                                     0.75 + 0.5 * s_hgt);
+
+            float stalk_bh = height * (0.8 + 0.5 * s_hgt)
+                * GRASS_FLOWER_STALK;
+
+            // Head size: per-stalk jitter, following blade height so heads
+            // LOD-fade with the field near GRASS_RANGE.
+            float hs = GRASS_FLOWER_SIZE * (0.75 + 0.45 * stalk_hash.x)
+                * clamp01(stalk_bh * 2.0);
+
+            // Stem stops half a head-radius short of the head centre, so its
+            // flat top always hides behind the disc.
+            emit_stem(s_root, s_world, stalk_bh - hs * 0.5, s_right, s_lean,
+                      src_tint, guv, gll, s_wind);
+
+            // Head tones for the CLAIMED flower (spots can come from a
+            // neighbouring block's bloom). Multicolor mats give each head
+            // ONE whole sprite texel; everything else uses the light/dark
+            // selection. Both ride the tint varying: rgb = petal, a = ring
+            // packed 5:5:5. The packed value is SMALL on purpose - a large
+            // cell index in tint.a picked up per-fragment interpolation
+            // rounding, and single texels decoded the wrong cell and
+            // flickered whenever the camera moved.
+            vec3 petal_light;
+            vec3 petal_dark;
+            if (flower_is_multicolor(stalk_raw)) {
+                grass_flower_tone_pick(stalk_raw, stalk_pick, petal_light,
+                                       petal_dark);
+            } else {
+                grass_flower_tones(stalk_flower_cell, stalk_family,
+                                   petal_light, petal_dark);
+            }
+            float head_jit = 0.85 + 0.30 * stalk_hash.y;
+            petal_light *= head_jit;
+            petal_dark *= head_jit;
+            vec4 head_tint = vec4(
+                petal_light,
+                float((int(clamp01(petal_dark.r) * 31.0 + 0.5) << 10)
+                      | (int(clamp01(petal_dark.g) * 31.0 + 0.5) << 5)
+                      | int(clamp01(petal_dark.b) * 31.0 + 0.5))
+            );
+            float head_rot
+                = fract(stalk_hash.x * 7.31 + stalk_hash.y * 3.17) * tau;
+            vec3 head_center = s_root + vec3(0.0, stalk_bh, 0.0) + s_lean
+                + s_wind + vec3(0.0, hs * 0.3, 0.0);
+            emit_flower_head(head_center, s_right, stalk_family, head_tint,
+                             gll, hs, head_rot);
+        } else
+#endif
+        {
+            // Colour bleed: BINARY per blade - a blade either takes the full
+            // tip dye (ramped inside emit_blade) or none at all, and the
+            // FRACTION of dyed blades follows the baked falloff, so the wash
+            // thins out block by block away from the bloom instead of fading
+            // per blade. Stable quantized-world key (the cherry-dither
+            // discipline), so the pick never re-rolls under camera motion.
+            vec3 tip_tint = vec3(0.0);
+            float tip_amt = 0.0;
+#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+            if (flower_dye_falloff > 1e-3) {
+                ivec2 dye_key = cameraPositionInt.xz * 64
+                    + ivec2(floor((clump.xz + cameraPositionFract.xz) * 64.0))
+                    + ivec2(53, 171);
+                vec2 dh = grass_hash2(dye_key);
+                if (dh.x < flower_dye_falloff) {
+                    tip_tint = flower_dye_color;
+                    tip_amt = GRASS_FLOWER_BLEED;
+                    // Glow dyes override the field colour and switch the
+                    // blade's mask so the deferred pass adds emission.
+                    // Amethyst wins where both reach (constant purple). The
+                    // glow density is the glow's OWN proximity roll
+                    // (dh.x < *_prox), NOT the flower-driven outer gate: a
+                    // flower beside the crystal raises flower_dye_falloff to
+                    // full, so gating the glow COLOUR on a hard *_prox > 0
+                    // threshold floods the glow's coarse box-shaped voxel
+                    // support (a lone crystal writes falloff only to its 3x3
+                    // cells) out to that hard edge - the visible SQUARE. Its
+                    // own smooth falloff as the density thins it radially like
+                    // an isolated crystal; with no flower present
+                    // flower_dye_falloff == *_prox, so that case is unchanged.
+                    if (amethyst_prox >= firefly_prox
+                        && dh.x < amethyst_prox) {
+                        blade_emit_mask = uint(MATERIAL_AMETHYST_BLADE);
+                        tip_tint = vec3(0.72, 0.55, 0.95);
+                    } else if (dh.x < firefly_prox) {
+                        // Firefly blink: every dyed blade rides its own
+                        // hashed phase and period, like scattered bugs. The
+                        // dye AMOUNT pulses (a brief flash), so an unlit tip
+                        // is simply normal grass - never a darkened amber.
+                        blade_emit_mask = uint(MATERIAL_FIREFLY_BLADE);
+                        float f_per = 2.8 + 1.7 * fract(dh.y * 9.77);
+                        float f_b
+                            = fract(frameTimeCounter / f_per + dh.y * 13.3);
+                        float f_glow = smoothstep(0.0, 0.08, f_b)
+                            * (1.0 - smoothstep(0.14, 0.25, f_b));
+                        tip_tint = vec3(1.00, 0.62, 0.16);
+                        tip_amt = GRASS_FLOWER_BLEED * f_glow;
+                    }
+                }
+            }
+#endif
+            emit_blade(root, world_root, bh, right, lean, src_tint, guv, gll,
+                       wind_blade, tip_tint, tip_amt);
+            blade_emit_mask = uint(MATERIAL_SMALL_PLANTS);
+        }
     }
 #endif // PROGRAM_GBUFFERS_TERRAIN_SOLID
 }

@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/gbuffers_skytextured:
   Handle vanilla sun and moon and custom skies

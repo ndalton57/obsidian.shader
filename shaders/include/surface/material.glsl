@@ -191,12 +191,12 @@ Material material_from(
                             // over-brightens / bleaches the dense 3D blades. sss_amount
                             // keeps the soft translucency. (Leaves and tall plants set
                             // their own sheen below and are unaffected.)
-                            material.sss_amount = 0.5;
+                            material.sss_amount = 0.2;
 #endif
                         } else { // 3
 #ifdef HARDCODED_SSS
                             // Tall plants (lower half)
-                            material.sss_amount = 0.5;
+                            material.sss_amount = 0.2;
                             material.sheen_amount = 1.0;
 #endif
                         }
@@ -206,7 +206,7 @@ Material material_from(
                         if (material_mask == 4u) { // 4
 #ifdef HARDCODED_SSS
                             // Tall plants (upper half)
-                            material.sss_amount = 0.5;
+                            material.sss_amount = 0.2;
                             material.sheen_amount = 1.0;
 #endif
                         } else { // 5
@@ -811,7 +811,7 @@ Material material_from(
                             // Open eyeblossom
 
 #ifdef HARDCODED_SSS
-                            material.sss_amount = 0.5;
+                            material.sss_amount = 0.2;
                             material.sheen_amount = 1.0;
 #endif
 
@@ -888,7 +888,7 @@ Material material_from(
 // Split out of tall plants (masks 3/4) for the grass geometry shader; shaded as tall
 // plants: same SSS translucency and sheen.
 #ifdef HARDCODED_SSS
-        material.sss_amount = 0.5;
+        material.sss_amount = 0.2;
         material.sheen_amount = 1.0;
 #endif
     }
@@ -897,7 +897,58 @@ Material material_from(
 // Split out of small plants (mask 2) for the grass geometry shader; shaded as small
 // plants: SSS translucency, no sheen (see the mask-2 note above).
 #ifdef HARDCODED_SSS
+        material.sss_amount = 0.2;
+#endif
+    }
+
+    if (material_mask >= 104u && material_mask <= 108u) { // small-flower heads
+// Generated flower-head quads above the grass canopy (the flat flower cross
+// itself re-emits as mask 2); petals are thin and translucent like the blades.
+#ifdef HARDCODED_SSS
+        material.sss_amount = 0.2;
+#endif
+    }
+
+    if (material_mask == 113u) { // animals / villagers (entity.properties)
+// Fleshy mobs: soft sun bleed through ears, snouts and wings. Entities are
+// never voxelized, so the solid-cube edge-wrap rim cannot model them - the
+// deferred pass exempts this mask from the rim path and these keep the
+// per-fragment shadow-map SSS. A mob body is one smooth thin-in-shadow-map
+// surface, so a given sss_amount reads far stronger on it than on
+// scattered blades.
+#ifdef HARDCODED_SSS
+        material.sss_amount = 0.2;
+#endif
+    }
+
+    if (material_mask == 126u) {
+// Firefly-bush dyed grass-blade tips. The blade shades like a small plant;
+// the amber tip glows via a warmth chroma key - the dye amount already
+// PULSES on hashed per-blade phases upstream, so the emission blinks with
+// it. Green never keys.
+#ifdef HARDCODED_SSS
         material.sss_amount = 0.5;
+#endif
+#ifdef HARDCODED_EMISSION
+        vec3 ap1 = material.albedo * rec2020_to_ap1_unlit;
+        float warmth = clamp01(ap1.r - max(ap1.g * 0.8, ap1.b * 1.4));
+        material.emission = 6.0 * material.albedo * warmth;
+#endif
+    }
+
+    if (material_mask == 125u) {
+// Amethyst-dyed grass-blade tips: a CONSTANT purple glow in the crystal's
+// colour (the crystal itself keeps its own emitter mask). Chroma-keyed on
+// purpleness, so the blade's green body never glows.
+#ifdef HARDCODED_SSS
+        material.sss_amount = 0.5;
+#endif
+#ifdef HARDCODED_EMISSION
+        vec3 ap1 = material.albedo * rec2020_to_ap1_unlit;
+        float purpleness = clamp01(
+            min(ap1.b - ap1.g * 0.9, ap1.r - ap1.g * 0.5) * 2.0
+        );
+        material.emission = 3.0 * material.albedo * purpleness;
 #endif
     }
 

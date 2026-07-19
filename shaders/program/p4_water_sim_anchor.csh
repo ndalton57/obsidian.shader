@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/p4_water_sim_anchor.csh:
   Water ripple simulation - after a sim step, stamp the step timestamp and

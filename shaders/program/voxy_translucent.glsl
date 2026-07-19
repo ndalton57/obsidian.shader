@@ -49,6 +49,11 @@ layout(
     location = 1
 ) out vec4 gbuffer_data; // albedo, block ID, flat normal, light levels
 
+// NB: no uniform/sampler declarations here - Voxy injects declarations for
+// everything listed in voxy.json (uniforms + samplers, depthtex1 included);
+// declaring one manually is a DUPLICATE -> the whole program fails to compile
+// and Voxy silently falls back to its stock look (flat bright-blue water).
+
 /*
 struct VoxyFragmentParameters {
     vec4 sampledColour;
@@ -166,6 +171,30 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
     vec3 pos_screen = vec3(coord, gl_FragCoord.z);
     vec3 pos_view = screen_to_view_space(vxProjInv, pos_screen, true);
     vec3 pos_scene = view_to_scene_space(pos_view);
+
+    // Occlusion against VANILLA geometry. Voxy depth-tests only against its
+    // OWN depth buffers, so a nearer vanilla wall never stops these
+    // fragments; kill them at the source: where vanilla opaque depth
+    // (depthtex1; 1.0 = sky = no occluder) sits clearly nearer, contribute
+    // nothing (zero alpha under ONE/ONE_MINUS_SRC_ALPHA leaves the buffer
+    // untouched). The half-block margin keeps the overdraw band - where Voxy
+    // copies coincide with vanilla terrain at near-equal depth - on its
+    // current path instead of shimmering on the depth tie. NB: the HAND is
+    // not in any depth buffer yet when this pass runs, so it cannot be
+    // excluded here - that is why this layer renders to its own buffer
+    // (colortex17) and c1 skips it on hand pixels at composite time.
+    float vanilla_depth = texelFetch(depthtex1, ivec2(gl_FragCoord.xy), 0).x;
+    if (vanilla_depth < 1.0) {
+        float z_vanilla = screen_to_view_space_depth(
+            gbufferProjectionInverse,
+            vanilla_depth
+        );
+        if (z_vanilla < -pos_view.z - 0.5) {
+            fragment_color = vec4(0.0);
+            gbuffer_data = vec4(0.0);
+            return;
+        }
+    }
 
     vec3 dir_world = normalize(pos_scene - gbufferModelViewInverse[3].xyz);
 

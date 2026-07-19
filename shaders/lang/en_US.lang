@@ -58,7 +58,7 @@ screen.end_light_color                 = Light Color
 screen.end_ambient_color               = Ambient Color
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §eby nullptr
 value.INFO.1                           = §aby nullptr
 value.INFO.2                           = §bby nullptr
@@ -73,7 +73,7 @@ option.WAVING_LEAVES                   = Waving Leaves
 option.WAVING_LEAVES.comment           = Leaf blocks wave in the wind.\n\nTo add a block to the list of waving leaf blocks, open shaders/block.properties and add it to the relevant category (10019)
 
 option.SHADER_GRASS                    = Shader Grass
-option.SHADER_GRASS.comment            = Replaces grass with real 3D blades grown by a geometry shader. Turn OFF to fall back to Tachyon's flat grass. (Currently affects biome-tinted grass; full grass-block coverage is in progress.)
+option.SHADER_GRASS.comment            = Replaces grass with real 3D blades grown by a geometry shader. Turn OFF to fall back to Obsidian's flat grass. (Currently affects biome-tinted grass; full grass-block coverage is in progress.)
 option.PROCEDURAL_GEOMETRY_MODE         = Procedural Geometry Mode
 option.PROCEDURAL_GEOMETRY_MODE.comment = How shader grass picks which face of a grass block grows the blades. Top Only = grass-block tops only (the original; field grass pops out for whole chunks seen from below). Deduced = also grows from sides, guessed from neighbouring blocks (cheaper, but can mis-grow on fully-enclosed blocks). Mask = confirms each face against a shadow-pass mask (handles enclosed/overhead blocks). Race = the first drawn face of each block claims it and grows (first-come; current-frame, no pop-out, no lag; recommended). Deduced and up require Colored Lights.
 value.PROCEDURAL_GEOMETRY_MODE.1        = Top Only
@@ -102,6 +102,16 @@ option.GRASS_WAVY_STRENGTH             = Wave Strength
 option.GRASS_WAVY_STRENGTH.comment     = How strongly blades sway in the wind. 0 = still
 option.GRASS_RANDOMNESS                = Randomness
 option.GRASS_RANDOMNESS.comment        = How much blades randomly lean / vary
+option.GRASS_FLOWERS                   = Flower Heads
+option.GRASS_FLOWERS.comment           = Grass blocks with a small flower on top grow a few taller stalks with colored flower heads, so the bloom stays visible above the dense grass
+option.GRASS_FLOWER_DENSITY            = Flower Head Count
+option.GRASS_FLOWER_DENSITY.comment    = Head budget for a bloom's whole patch (out to ~1.5 blocks), distributed with the same falloff as the tip dye. Blocks in the patch that aren't grass drop their share
+option.GRASS_FLOWER_SIZE               = Flower Head Size
+option.GRASS_FLOWER_SIZE.comment       = Radius of the flower head, in blocks
+option.GRASS_FLOWER_BLEED              = Flower Color Bleed
+option.GRASS_FLOWER_BLEED.comment      = How strongly blade tips on the bloom's block wash toward its petal color. 0 disables
+option.GRASS_FLOWER_BLEED_TOP          = Flower Bleed Height
+option.GRASS_FLOWER_BLEED_TOP.comment  = The top fraction of each blade the color ramp occupies; below it the blade is untouched. 0.20 = only the top fifth transitions
 suffix.BASE_GRASS_HEIGHT               = m
 suffix.SHORT_GRASS_HEIGHT              = x
 suffix.TALL_GRASS_HEIGHT               = x
@@ -388,8 +398,6 @@ option.BLOCKY_CLOUDS_BRIGHTNESS          = Brightness
 option.BLOCKY_CLOUDS_BOTTOMLIGHT         = Bottom Brightness
 option.BLOCKY_CLOUDS_BOTTOMLIGHT.comment = Increases the brightness of the undersides of clouds
 option.BLOCKY_CLOUDS_SIZE                = Size
-option.BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING         = Atmospheric Scattering
-option.BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING.comment = When enabled, tints clouds slightly red. This effect increases with distance
 option.BLOCKY_CLOUDS_WIND_SPEED          = Wind Speed
 suffix.BLOCKY_CLOUDS_WIND_SPEED          = m/s
 option.BLOCKY_CLOUDS_WIND_ANGLE          = Wind Angle

@@ -159,6 +159,15 @@ vec3 animate_vertex(
         case MATERIAL_SMALL_PLANTS:
         case MATERIAL_SHORT_GRASS:
         case MATERIAL_OPEN_EYEBLOSSOM:
+        case MATERIAL_FLOWER_RED:
+        case MATERIAL_FLOWER_YELLOW:
+        case MATERIAL_FLOWER_BLUE:
+        case MATERIAL_FLOWER_PURPLE:
+        case MATERIAL_FLOWER_WHITE:
+        // firefly bush sways like the small plant it re-emits as; the
+        // wildflowers mat (113) is intentionally absent - flat ground cover
+        // stays static, like its strong-SSS material
+        case MATERIAL_FLOWER_FIREFLY_BUSH:
 #if defined GRASS_GEOMETRY && defined SHADER_GRASS
             // Shader Grass rebuilds grass as 3D blades and waves them itself in
             // the geometry shader. Keep the source vertices STATIC here so the
@@ -179,6 +188,10 @@ vec3 animate_vertex(
 
         case MATERIAL_TALL_PLANTS_LOWER:
         case MATERIAL_TALL_GRASS_LOWER:
+        case MATERIAL_FLOWER_TALL_FIRST:
+        case MATERIAL_FLOWER_TALL_FIRST + 1:
+        case MATERIAL_FLOWER_TALL_FIRST + 2:
+        case MATERIAL_FLOWER_TALL_LAST:
             return world_pos
                 + (get_wind_displacement(
                        world_pos,

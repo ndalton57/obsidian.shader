@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/c14_c18_bloom_upsample.fsh
   Progressively upsample bloom tiles

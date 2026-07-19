@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/c19_color_grading:
   Apply bloom, color grading and tone mapping then convert to rec. 709

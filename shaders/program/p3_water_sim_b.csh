@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/p3_water_sim_b.csh:
   Water ripple simulation - second half-step of the wave equation. Reads the

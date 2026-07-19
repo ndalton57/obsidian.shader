@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/d4b_sculk_field.csh:
   Sculk glow field writer. Stamps every on-screen sculk fragment (material

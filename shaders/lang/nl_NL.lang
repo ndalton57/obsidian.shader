@@ -45,7 +45,7 @@ screen.end_light_color                 = Lichtkleur
 screen.end_ambient_color               = Omgevingskleur
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §edoor nullptr
 value.INFO.1                           = §adoor nullptr
 value.INFO.2                           = §bdoor nullptr

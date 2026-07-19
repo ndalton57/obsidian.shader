@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/shadow:
   Render shadow map
@@ -152,6 +152,12 @@ void main() {
     // untouched, so blade growing still works).
     bool sg_short = material_mask == 85u // dedicated short_grass/fern (colour-independent)
         || (material_mask == 2u && tint.g > tint.r + 0.04 && tint.g > tint.b + 0.04); // mod grass (2)
+#if defined GRASS_FLOWERS && PROCEDURAL_GEOMETRY_MODE >= 2
+    // Small flowers (by-colour masks) are replaced by the grown stalk + head
+    // near the camera - collapse their cross's shadow with them
+    sg_short = sg_short
+        || (material_mask >= 104u && material_mask <= 108u);
+#endif
     bool sg_tall = material_mask == 82u || material_mask == 83u;
     if (sg_short || sg_tall) {
         vec3 sg_center = pos + cameraPosition + at_midBlock * rcp(64.0); // block centre (world)

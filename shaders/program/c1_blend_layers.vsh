@@ -1,7 +1,7 @@
 /*c1.v
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/c1_blend_layers
   Apply volumetric fog

@@ -1,7 +1,7 @@
 /*p0_cl
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/p0_clouds_prep:
   Create the cloud shadow map from the volumetric cloud field

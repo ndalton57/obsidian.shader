@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/post/bloom/gaussian0.fsh
   1D horizontal gaussian blur pass for bloom tiles

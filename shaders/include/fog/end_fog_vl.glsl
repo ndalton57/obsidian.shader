@@ -22,8 +22,8 @@
   the flash through the cloud interior.
 
   Terrain lighting is untouched — all light here is fog-internal, colored by
-  Tachyon's settings (VORTEX_LIGHT_COL_*, END_LIGHTNING_COL_*), with
-  END_FOG_BRIGHTNESS as the single bridge into Tachyon's exposure.
+  Obsidian's settings (VORTEX_LIGHT_COL_*, END_LIGHTNING_COL_*), with
+  END_FOG_BRIGHTNESS as the single bridge into Obsidian's exposure.
 */
 
 #include "/include/utility/fast_math.glsl"

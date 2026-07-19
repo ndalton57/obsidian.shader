@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   world0/prepare.vsh:
   Create the cloud shadow map from the volumetric cloud field

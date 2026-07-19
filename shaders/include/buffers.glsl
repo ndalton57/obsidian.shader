@@ -40,10 +40,19 @@ const vec4 colortex3ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex13ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 shadowcolor0ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
-#ifdef VOXY 
-// Ty Cortex for the extra color textures! 
-const int colortex16Format = RGBA16; // Voxy water gbuffer data 
+#ifdef VOXY
+// Ty Cortex for the extra color textures!
+const int colortex16Format = RGBA16; // Voxy water gbuffer data
 const bool colortex16Clear = true;
 const vec4 colortex16ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
+// Voxy translucent LoD color (voxy_translucent -> c1). Its OWN buffer, never
+// colortex13: the glint is summed additively into 13 and a translucent write
+// there cannot be separated from it afterward, so sharing the slot meant LoD
+// water/ice/glass could dim a held enchanted item (the hand is not yet in any
+// depth buffer when Voxy's pass runs, so no in-pass test can exclude it).
+// c1 composites this layer under the vanilla translucents and SKIPS the hand.
+const int colortex17Format = RGBA16F;
+const bool colortex17Clear = true;
+const vec4 colortex17ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 */

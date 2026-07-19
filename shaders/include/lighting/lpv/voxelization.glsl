@@ -103,7 +103,8 @@ bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
     // not at block-grid corners, so they receive the +128 "transparent" marker
     // below -> identical to air for the LPV (no colored-light impact), but still
     // readable as material 2 by the grass shader's voxel lookup.
-    bool is_small_plant = block_id == 2u || block_id == 85u; // flowers/mod grass (2) + short_grass (85)
+    bool is_small_plant = block_id == 2u || block_id == 85u // mod grass (2) + short_grass (85)
+        || (block_id >= 104u && block_id <= 123u); // flowers, tall-flower lowers, ground blooms
     // Shader Grass: tall_grass/large_fern (materials 82/83) are voxelized the same way, so
     // the bushiness bake can find them and lift the grass-block-top blades taller there.
     bool is_tall_grass = block_id == 82u || block_id == 83u;
@@ -116,9 +117,15 @@ bool is_voxelized(uint block_id, bool vertex_at_grid_corner) {
     // marker below - its quad has both corner and inset vertices, so the
     // corner test would race the cell every frame (gotcha #11 class).
     bool is_redstone_wire = block_id == 93u;
+    // Ground-cover plants (124: leaf litter, warped/crimson roots): thin
+    // decor that must never read as a covering block above a grass block -
+    // voxelized at ALL verts and stored with the forced transparent marker
+    // below, so grass_air_above sees the cell as OPEN and the shader grass
+    // keeps growing through them.
+    bool is_ground_cover = block_id == 124u;
 
     return (vertex_at_grid_corner || is_light_emitting_block || is_small_plant
-            || is_tall_grass || is_snow || is_redstone_wire)
+            || is_tall_grass || is_snow || is_redstone_wire || is_ground_cover)
         && is_terrain && !is_transparent_block;
 }
 
@@ -148,7 +155,18 @@ void update_voxel_map(uint block_id) {
     // race. This also matches the documented intent (plants are transparent to the
     // LPV, zero colored-light impact) and is still read back as material 2 via the
     // `& 127u` mask in grass_read_voxel.
-    bool small_plant = block_id == 2u || block_id == 82u || block_id == 83u || block_id == 85u; // small plants + tall/short grass
+    bool small_plant = block_id == 2u || block_id == 82u || block_id == 83u || block_id == 85u
+        || (block_id >= 104u && block_id <= 123u) // small plants + tall/short grass
+        // Amethyst buds/clusters (55, an LPV emitter): their cross quads mix
+        // corner and inset vertices, so without the forced marker the cell
+        // RACES solid<->transparent every frame (gotcha #11) and kills the
+        // grass under them. Forced +128 keeps the cell open (grass grows)
+        // while the LPV still reads the emitter id via & 127.
+        || block_id == 55u
+        // Ground-cover plants (leaf litter, warped/crimson roots): forced
+        // transparent so the shader grass grows through them; their mixed
+        // corner/inset vertices would otherwise race the cell (gotcha #11)
+        || block_id == 124u;
     bool is_snow_layer = block_id == 84u; // snow layer: force the SOLID (bare id) marker, never +128
 
     vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
@@ -223,7 +241,82 @@ void update_voxel_map(uint block_id) {
 // top vertices writes its OWN texel (race-free, no atomics) AND vertically-stacked grass blocks never
 // share a slot. The grass shader bilinearly blends the 4 corners to reproduce the top's smooth
 // per-position colour and brightness for blades grown on any face.
+#ifdef GRASS_FLOWERS
+// Shader Grass: capture the REAL bloom colours of a small flower into ITS OWN
+// (otherwise unused) cell of the grass-tint buffer - four texels probed from
+// the flower's atlas sprite, one per corner slot. The generated flower heads
+// read them back, so a head mirrors the actual flower texture (a poppy's reds,
+// an allium's range of purples) instead of a canned palette. The cross's 8
+// verts are race-free per slot: both verts sharing a corner compute the SAME
+// probe uvs, so double-writes store identical values.
+void update_flower_palette() {
+    vec3 model_pos = gl_Vertex.xyz + at_midBlock * rcp(64.0);
+    vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
+    vec3 scene_center = transform(shadowModelViewInverse, view_pos);
+
+    vec3 vp = scene_to_grass_tint_space(scene_center);
+    if (any(lessThan(vp, vec3(0.0)))
+        || any(greaterThanEqual(vp, vec3(GRASS_TINT_SIZE)))) {
+        return;
+    }
+    ivec3 cell = ivec3(vp);
+
+    vec2 uv_minus_mid = gl_MultiTexCoord0.xy - mc_midTexCoord;
+    vec2 tile_half = abs(uv_minus_mid);
+    if (max_of(tile_half) < 1e-6) {
+        return;
+    }
+
+    // Which uv direction is the sprite's TOP (the bloom end): a vertex below
+    // the block centre sits at the sprite's bottom edge, so its uv offset
+    // from the tile centre points down-sprite - flip that.
+    float v_up = (at_midBlock.y > 0.0 ? -1.0 : 1.0) * sign(uv_minus_mid.y);
+
+    ivec2 corner = ivec2(at_midBlock.x < 0.0 ? 1 : 0, at_midBlock.z < 0.0 ? 1 : 0);
+    vec2 cq = vec2(corner) * 2.0 - 1.0;
+
+    // Probe a few texels in this corner's quadrant of the bloom half; keep
+    // the most flower-like one (opaque and not stem-green). If every probe
+    // misses the bloom, store nothing - the head falls back to its family
+    // palette.
+    vec3 best = vec3(0.0);
+    float best_score = 0.05;
+    bool found = false;
+    for (int i = 0; i < 4; ++i) {
+        vec2 o = vec2(
+            cq.x * (0.10 + 0.16 * float(i & 1)),
+            v_up * (0.04 + 0.15 * float(i >> 1))
+        );
+        vec4 s = textureLod(tex, mc_midTexCoord + o * tile_half * 2.0, 0.0);
+        float greenness = s.g - max(s.r, s.b);
+        float luma = dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
+        // Luma-weighted: dark sprite outline/shadow texels lose to bright
+        // petals; green stem texels are rejected outright
+        float score = s.a * (0.25 + 1.3 * luma)
+            - clamp(greenness, 0.0, 1.0) * 1.5;
+        if (score > best_score) {
+            best_score = score;
+            best = s.rgb;
+            found = true;
+        }
+    }
+    if (!found) {
+        return;
+    }
+
+    // gl_Color is 1.0 for vanilla flowers; folded in for tinted mod blooms
+    ivec3 store_cell = ivec3(cell.x * 2 + corner.x, cell.z * 2 + corner.y, cell.y);
+    imageStore(grass_tint_img, store_cell, vec4(best * gl_Color.rgb, 1.0));
+}
+#endif
+
 void update_grass_tint(uint block_id) {
+#ifdef GRASS_FLOWERS
+    if (block_id >= 104u && block_id <= 114u) { // capturing flowers (the mats use curated palettes)
+        update_flower_palette();
+        return;
+    }
+#endif
     if (block_id != 81u) { // MATERIAL_GRASS_BLOCK
         return;
     }
@@ -284,6 +377,7 @@ void update_sss_faces(uint block_id) {
     bool is_non_occluder = block_id == 1u || block_id == 18u || block_id == 28u
         || block_id == 30u || block_id == 80u   // water / transparent objects / misc
         || block_id == 2u || block_id == 85u || block_id == 82u || block_id == 83u // small/tall grass, plants
+        || (block_id >= 104u && block_id <= 123u) // flowers, tall-flower lowers, ground blooms
         || block_id == 3u || block_id == 4u      // tall plants (lower/upper)
         || block_id == 5u                        // leaves
         || block_id == 93u;                      // redstone wire (flat decal, never blocks the sun)

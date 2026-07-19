@@ -4,7 +4,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   include/misc/grass_election.glsl:
   Elects the ONE grass-block face that grows blades, shared by the solid terrain

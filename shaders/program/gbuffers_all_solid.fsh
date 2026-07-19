@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/gbuffers_all_solid:
   Handle terrain, entities, the hand, beacon beams and spider eyes
@@ -152,6 +152,7 @@ uniform vec4 entityColor;
 
 #include "/include/misc/material_fix.glsl"
 #include "/include/misc/material_masks.glsl"
+
 #if defined CHERRY_GROVE_PINK_GRASS && defined PROGRAM_GBUFFERS_TERRAIN
 #include "/include/misc/cherry_grove.glsl"
 #endif
@@ -302,7 +303,10 @@ void main() {
     // Shader Grass: blades grown by the geometry shader are tagged as small
     // plants and carry no parallax data, so skip POM for them (they fall into
     // the `parallax_uv = uv` branch below and texture normally).
-    has_pom = has_pom && material_mask != MATERIAL_SMALL_PLANTS;
+    has_pom = has_pom && material_mask != MATERIAL_SMALL_PLANTS
+        && !is_flower_mask(material_mask)
+        && material_mask != uint(MATERIAL_AMETHYST_BLADE)
+        && material_mask != uint(MATERIAL_FIREFLY_BLADE);
 
     vec3 tangent_dir = -normalize(tangent_pos);
     mat2 uv_gradient = mat2(dFdx(uv), dFdy(uv));
@@ -363,7 +367,12 @@ void main() {
     vec4 cherry_tint = tint;
     bool cherry_is_blade = false;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    cherry_is_blade = material_mask == MATERIAL_SMALL_PLANTS;
+    // Every GS-grown blade mask counts, not just the plain one: the glow
+    // blade masks otherwise fall into the per-texel machinery below, whose
+    // derivative extrapolation bands badly on thin blade geometry
+    cherry_is_blade = material_mask == MATERIAL_SMALL_PLANTS
+        || material_mask == uint(MATERIAL_AMETHYST_BLADE)
+        || material_mask == uint(MATERIAL_FIREFLY_BLADE);
 #endif
     if (!cherry_is_blade) {
         // Stable, texture-ALIGNED per-texel key. Load-bearing pieces: (1) the Iris SPLIT camera
@@ -414,6 +423,102 @@ void main() {
 #endif
 #ifdef SPECULAR_MAPPING
     vec4 specular_map = read_tex(specular);
+#endif
+
+#if defined PROGRAM_GBUFFERS_TERRAIN_SOLID && defined SHADER_GRASS \
+    && defined GRASS_FLOWERS
+    if (material_mask >= uint(MATERIAL_FLOWER_FIRST)
+        && material_mask <= uint(MATERIAL_FLOWER_LAST)) {
+        // Generated flower-head quad (grown by the terrain geometry shader
+        // above a stalk). uv carries the quad's local coords ([-1,1]^2,
+        // pre-rotated per head in the GS), tint.a the flower block's
+        // palette-cell code and tint.rgb the family fallback colour. The
+        // disc is drawn PIXEL-ART style: coords quantized to a chunky texel
+        // grid, and each texel coloured from the flower's REAL sprite
+        // palette - four texels the shadow pass captured from the flower's
+        // own texture (see update_flower_palette) - so a head mirrors the
+        // actual bloom's colour range. The head carries no texture maps.
+        // Texel-centre coords on a ~10-texel grid across the head
+        const float head_px = 5.0;
+        vec2 head_g = floor(uv * head_px);
+        vec2 p = (head_g + 0.5) * (1.0 / head_px);
+
+        float r = length(p);
+        float theta = atan(p.y, p.x);
+
+        // Per-family petal SHAPE only - every colour, centre included, comes
+        // from the flower's own palette, so no head ever shows a hue its
+        // sprite doesn't have
+        // Even petal counts only: an odd count can never sit symmetrically
+        // on the square texel grid. petal_edge sharpens the valleys between
+        // petals (higher = more separated petals).
+        float petals;
+        float centre_r;
+        float petal_edge = 0.7;
+        if (material_mask == uint(MATERIAL_FLOWER_RED)) {
+            petals = 4.0; // poppy: broad petals, deep heart
+            centre_r = 0.30;
+        } else if (material_mask == uint(MATERIAL_FLOWER_YELLOW)) {
+            petals = 12.0; // dandelion: fluffy, deeper core
+            centre_r = 0.22;
+        } else if (material_mask == uint(MATERIAL_FLOWER_BLUE)) {
+            petals = 8.0; // cornflower: fringe of eight, crisper petal
+            centre_r = 0.22; // separation than the daisy's
+            petal_edge = 0.9;
+        } else if (material_mask == uint(MATERIAL_FLOWER_PURPLE)) {
+            petals = 12.0; // allium pompom: dense scalloped ball, no heart
+            centre_r = 0.0;
+        } else {
+            petals = 8.0; // daisy
+            centre_r = 0.26;
+        }
+
+        float scallop = pow(abs(cos(theta * petals * 0.5)), petal_edge);
+        float rim = 0.60 + 0.40 * scallop;
+        if (r > rim) {
+            discard;
+            return;
+        }
+
+        // Two petal tones from the geometry shader: tint.rgb = petal tone,
+        // tint.a = ring tone packed 5:5:5. The packed value is small, so it
+        // interpolates bit-exactly across the quad - a large index here
+        // picked up per-fragment rounding and flickered texels on any
+        // camera move. Structure stays: bright petals, darker outer ring,
+        // family centre; each texel then gets only a SUBTLE wobble.
+        int f_pk = int(tint.a + 0.5);
+        vec3 f_dark = f_pk > 0
+            ? vec3(float((f_pk >> 10) & 31), float((f_pk >> 5) & 31),
+                   float(f_pk & 31))
+                * (1.0 / 31.0)
+            : tint.rgb * 0.72;
+
+        uint fh = uint(int(head_g.x) + 57) * 0x8da6b343u
+            ^ uint(int(head_g.y) + 23) * 0xd8163841u
+            ^ uint(f_pk) * 0x9E3779B1u;
+        fh = (fh ^ (fh >> 13)) * 0x9E3779B1u;
+        fh ^= fh >> 16;
+
+        vec3 petal_col = (r > rim * 0.66) ? f_dark : tint.rgb;
+        if (r < centre_r) {
+            petal_col = f_dark * 0.75; // deeper core in the bloom's own hue
+        }
+        petal_col = mix(petal_col, (r > rim * 0.66) ? tint.rgb : f_dark,
+                        0.10 * float(fh & 3u) * (1.0 / 3.0));
+        petal_col *= 0.94 + 0.12 * float((fh >> 8) & 255u) * (1.0 / 255.0);
+        // The gbuffer packs albedo into 8-bit fields with NO clamp - a
+        // component pushed past 1.0 by the stacked jitters overflows into
+        // the neighbouring byte and wraps the hue entirely (white -> green,
+        // blue -> yellow, red -> dark blue), one corrupted texel at a time
+        petal_col = clamp01(petal_col);
+        base_color = vec4(petal_col, 1.0);
+#ifdef NORMAL_MAPPING
+        normal_map = vec3(0.5, 0.5, 1.0); // flat
+#endif
+#ifdef SPECULAR_MAPPING
+        specular_map = vec4(0.0);
+#endif
+    }
 #endif
 #else
     vec3 screen_pos = vec3(

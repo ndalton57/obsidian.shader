@@ -313,29 +313,28 @@ vec4 raymarch_blocky_clouds(
 
         transmittance *= step_transmittance;
 
-        // Update distance to cloud
-        float distance_to_sample = distance(cameraPosition, world_pos);
+        // Track the cloud's mean HORIZONTAL distance for the fade below
+        float distance_to_sample = distance(cameraPosition.xz, world_pos.xz);
         distance_sum += distance_to_sample * density;
         distance_weight_sum += density;
     }
 
-    // Remap the transmittance so that min_transmittance is 0
-    float clouds_transmittance
-        = linear_step(min_transmittance, 1.0, transmittance);
-
-    // Distance fade
+    // Distance fade on horizontal (xz) ground distance ONLY - never Y, so
+    // raising the layer's altitude cannot thin the clouds overhead (a
+    // 3D-distance fade did exactly that). Fully solid out to fade_start,
+    // then halving every fade_half_life: only clouds a long ground distance
+    // away dissolve, instead of stacking into a solid white wall at the
+    // horizon.
+    const float fade_start = 512.0; // ground distance fully solid within, m
+    const float fade_half_life = 512.0; // metres per halving beyond that
     float distance_fade = distance_weight_sum == 0.0
         ? 1.0
-        : exp(-0.002 * distance_sum / distance_weight_sum);
+        : exp2(
+              -max0(distance_sum / distance_weight_sum - fade_start)
+              * rcp(fade_half_life)
+        );
 
-#ifdef BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING
-    scattering
-        *= distance_fade * mix(vec3(1.0, 0.66, 0.50), vec3(1.0), distance_fade);
-#else
-    scattering *= distance_fade;
-#endif
-    scattering *= BLOCKY_CLOUDS_BRIGHTNESS;
-
+    scattering *= distance_fade * BLOCKY_CLOUDS_BRIGHTNESS;
     transmittance = mix(1.0, transmittance, distance_fade);
 
     return vec4(scattering, transmittance);

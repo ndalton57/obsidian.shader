@@ -1,7 +1,7 @@
 /*
 --------------------------------------------------------------------------------
 
-  Tachyon Shader
+  Obsidian Shader
 
   program/d0_sky_map:
   Render omnidirectional sky map for reflections and SH lighting

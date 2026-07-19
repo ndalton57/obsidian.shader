@@ -4,7 +4,12 @@
 uint get_material_mask() {
 #if defined PROGRAM_GBUFFERS_TERRAIN || defined PROGRAM_GBUFFERS_WATER
     // Terrain
-    return uint(max0(mc_Entity.x - 10000.0));
+    uint id = uint(max0(mc_Entity.x - 10000.0));
+    // Ground-cover plants (leaf litter, warped/crimson roots): id 124 exists
+    // only for the shadow-pass voxelization (stored transparent, so the
+    // shader grass grows through them); they render in the thin
+    // bleed-light tier
+    return id == 124u ? 15u : id;
 #elif defined PROGRAM_GBUFFERS_ENTITIES \
     || defined PROGRAM_GBUFFERS_ENTITIES_TRANSLUCENT
     // Entities

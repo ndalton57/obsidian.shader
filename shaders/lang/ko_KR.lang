@@ -45,7 +45,7 @@ screen.end_light_color                 = 조명 색상
 screen.end_ambient_color               = 주변광 색상
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §e제작: nullptr
 value.INFO.1                           = §a제작: nullptr
 value.INFO.2                           = §b제작: nullptr
@@ -272,8 +272,6 @@ option.BLOCKY_CLOUDS_BRIGHTNESS          = 밝기
 option.BLOCKY_CLOUDS_BOTTOMLIGHT         = 하단 밝기
 option.BLOCKY_CLOUDS_BOTTOMLIGHT.comment = 구름 아랫면의 밝기를 높입니다
 option.BLOCKY_CLOUDS_SIZE                = 크기
-option.BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING         = 대기 산란
-option.BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING.comment = 활성화 시 구름에 약간의 붉은 색조를 입힙니다. 이 효과는 거리가 멀어질수록 증가합니다
 option.BLOCKY_CLOUDS_WIND_SPEED          = 풍속
 suffix.BLOCKY_CLOUDS_WIND_SPEED          = m/s
 option.BLOCKY_CLOUDS_WIND_ANGLE          = 풍향

@@ -45,7 +45,7 @@ screen.end_light_color                 = Цвет света
 screen.end_ambient_color               = Цвет окружения
 
 
-option.INFO                            = Tachyon Shaders
+option.INFO                            = Obsidian Shaders
 value.INFO.0                           = §eсделано nullptr
 value.INFO.1                           = §aсделано nullptr
 value.INFO.2                           = §bсделано nullptr
@@ -271,8 +271,6 @@ option.BLOCKY_CLOUDS_BRIGHTNESS          = Яркость
 option.BLOCKY_CLOUDS_BOTTOMLIGHT         = Яркость снизу
 option.BLOCKY_CLOUDS_BOTTOMLIGHT.comment = Увеличивает яркость нижней части облаков
 option.BLOCKY_CLOUDS_SIZE                = Размер
-option.BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING         = Атмосферное рассеяние
-option.BLOCKY_CLOUDS_ATMOSPHERIC_SCATTERING.comment = При включении придаёт облакам лёгкий красноватый оттенок. Эффект усиливается с расстоянием
 option.BLOCKY_CLOUDS_WIND_SPEED          = Сила ветра
 suffix.BLOCKY_CLOUDS_WIND_SPEED          = m/s
 option.BLOCKY_CLOUDS_WIND_ANGLE          = Направление ветра
