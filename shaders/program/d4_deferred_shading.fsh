@@ -232,7 +232,8 @@ float compute_lod_ssao(
     float depth_lod,
     vec3 view_face_normal,
     ivec2 texel,
-    float dither
+    float dither,
+    float contrast
 ) {
     const int sample_count = 7;
 
@@ -268,7 +269,8 @@ float compute_lod_ssao(
             tap_view = screen_to_view_space(
                 gbufferProjectionInverse, vec3(tap_uv, tap_depth), true);
         } else {
-            tap_depth = texelFetch(lod_depth_tex_solid, tap_texel, 0).x;
+            tap_depth
+                = texelFetch(lod_depth_tex_solid_deferred, tap_texel, 0).x;
             if (tap_depth == 0.0) {
                 continue; // empty LoD texel (sky)
             }
@@ -288,11 +290,10 @@ float compute_lod_ssao(
         }
     }
 
-    // Contrast shaping: the reference applies a steep curve on its side
-    // (pow4 into ambient); a source-side exponent deepens crevice darkening
-    // without touching the lit areas. Raise for stronger LoD AO.
-    const float lod_ao_contrast = 2.0;
-    return pow(max0(1.0 - occlusion / max(n, 1e-5)), lod_ao_contrast);
+    // Contrast shaping: a source-side exponent deepens crevice darkening
+    // without touching the lit areas. The caller ramps it up across the
+    // geometry border so LoD AO starts as mild as the vanilla-side GTAO.
+    return pow(max0(1.0 - occlusion / max(n, 1e-5)), contrast);
 }
 #endif
 
@@ -322,6 +323,7 @@ void main() {
     bool is_lod = is_lod_terrain(depth_mc, depth_lod);
 #else
     const bool is_lod = false;
+    const float lod_geo_blend = 0.0;
 #define depth_mc depth
 #endif
 
@@ -339,6 +341,21 @@ void main() {
     vec3 position_world = position_scene + cameraPosition;
     vec3 direction_world
         = normalize(position_scene - gbufferModelViewInverse[3].xyz);
+
+#ifdef LOD_MOD_ACTIVE
+    // Ramp across the vanilla->LoD GEOMETRY border (the render distance).
+    // Distinct from lod_blend, which crossfades the two lighting MODELS at
+    // the shadow-map border - when shadowDistance < far the two borders are
+    // different places, and the geometry line has no dither band. is_lod-
+    // keyed inputs (LoD AO contrast, LoD plant SSS) step hard there unless
+    // ramped: LoD terrain starts border-matched to the vanilla far side and
+    // eases into its deep-far look over the same blend width.
+    float lod_geo_blend = smoothstep(
+        far,
+        far + LOD_BLEND_WIDTH,
+        length(position_scene)
+    );
+#endif
 
 #if defined WORLD_OVERWORLD
     // Atmosphere
@@ -582,7 +599,8 @@ void main() {
                 depth_lod,
                 mat3(gbufferModelView) * flat_normal,
                 texel,
-                lod_dither
+                lod_dither,
+                mix(1.0, 2.0, lod_geo_blend) // full contrast deep-far only
             );
             ambient_sss = 0.0;
             bent_normal = flat_normal;
@@ -749,8 +767,9 @@ void main() {
 #endif
 
             // FAR-MODEL inputs (screenspace), computed only for far-PICKED pixels (the
-            // near model ignores them, so near picks skip the SSRT march). For vanilla
-            // terrain the LoD buffer is empty here, so the march reads lit / no occlusion.
+            // near model ignores them, so near picks skip the SSRT march). LoD pixels
+            // march the LoD buffer in LoD space; vanilla far pixels march depthtex1 in
+            // vanilla space - each fully self-consistent.
             if (pick_far) {
 #ifdef SHADOW_SSRT
 #ifdef LOD_MOD_ACTIVE
@@ -773,21 +792,23 @@ void main() {
                     // occlusion ray, not by a marched light path.
                     sss_depth_distant = 0.0;
                 } else {
-                    // Vanilla far-field: lit (no LoD data to march; marching
-                    // the vanilla depth at far-field scale mass-shadows real
-                    // terrain relief). Transmission still gets the occlusion
-                    // ray against the combined depth.
-                    shadow_distant = 1.0;
+                    // Vanilla far-field (the band and everything past
+                    // shadowDistance): the SAME march in VANILLA space -
+                    // depthtex1 with the gbuffer projection and near/far*4
+                    // planes - so real relief casts marched shadows at the
+                    // correct scale and the MID band blends shadow-map
+                    // darkness into marched darkness instead of washing
+                    // out to fully lit.
+                    vec2 vanilla_light = get_sss_screen_occlusion(
+                        uv,
+                        position_view,
+                        depth,
+                        false,
+                        depth_lod
+                    );
+                    shadow_distant = vanilla_light.x;
+                    sss_screen_occlusion = vanilla_light.y;
                     sss_depth_distant = 0.0;
-                    if (material.sss_amount > eps) {
-                        sss_screen_occlusion = get_sss_screen_occlusion(
-                            uv,
-                            position_view,
-                            depth,
-                            false,
-                            depth_lod
-                        ).y;
-                    }
                 }
 #else
                 shadow_distant = get_screen_space_shadows(
@@ -998,8 +1019,45 @@ void main() {
         }
 
         if (pick_far) {
+            // LoD SSS overrides, applied only to real LoD geometry (the
+            // vanilla band past shadowDistance keeps the near-field amounts;
+            // its plants are true thin geometry):
+            Material material_far = material;
+
+            // Ground cubes (grass block, dirt family) carry NO SSS in the
+            // far model, for ANY geometry - not just LoD. The near model
+            // expresses the ground glow as the edge-wrap rim; the far
+            // model's screen-space transmission reads far brighter than
+            // that, so in the MID dither band the far-picked share of a
+            // vanilla grass/dirt pixel flashed bright before fading to the
+            // near look. Near-field GROUND_SSS is unaffected.
+            if (material_mask == 6u || material_mask == 81u) {
+                material_far.sss_amount = 0.0;
+            }
+
+            // Plant tiers 0.2 -> 0.5 on real LoD geometry only: LoD meshes
+            // draw plants as thick opaque clusters, and the near-field
+            // translucency reads nearly black on them at distance. Vanilla
+            // plants (including the band past shadowDistance) keep 0.2 in
+            // BOTH models - they are true thin geometry, and a far-side
+            // bump would flash bright across the dither band. Ramped over
+            // the geometry border so the first LoD plants match the vanilla
+            // side instead of stepping.
+            if (is_lod) {
+                bool is_plant_tier = material_mask == 2u
+                    || material_mask == 3u
+                    || material_mask == 4u
+                    || material_mask == 82u
+                    || material_mask == 83u
+                    || material_mask == 85u
+                    || (104u <= material_mask && material_mask <= 108u);
+                if (is_plant_tier) {
+                    material_far.sss_amount = mix(0.2, 0.5, lod_geo_blend);
+                }
+            }
+
             lighting_far = get_diffuse_lighting(
-                material,
+                material_far,
                 position_scene,
                 normal,
                 flat_normal,

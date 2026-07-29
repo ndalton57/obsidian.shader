@@ -168,11 +168,13 @@ vec3 animate_vertex(
         // wildflowers mat (113) is intentionally absent - flat ground cover
         // stays static, like its strong-SSS material
         case MATERIAL_FLOWER_FIREFLY_BUSH:
-#if defined GRASS_GEOMETRY && defined SHADER_GRASS
+#if (defined GRASS_GEOMETRY || defined GRASS_VERTEX) && defined SHADER_GRASS
             // Shader Grass rebuilds grass as 3D blades and waves them itself in
-            // the geometry shader. Keep the source vertices STATIC here so the
-            // GS's per-blade random hash stays stable - otherwise the blades jump
-            // to new random positions every frame (the massive flicker).
+            // the solid program's geometry shader. Keep the source vertices
+            // STATIC here so the per-blade random hash stays stable - otherwise
+            // the blades jump to new random positions every frame (the massive
+            // flicker). GRASS_VERTEX (the cutout program) matches, so the flat
+            // decals stay exactly where the blades expect them.
             return world_pos;
 #else
             return world_pos

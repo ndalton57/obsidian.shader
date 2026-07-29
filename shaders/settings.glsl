@@ -158,6 +158,8 @@ const float wetnessHalflife         = 70.0;
   #define SSS_SHEEN
 //#define LOD_REGIME_DEBUG // TEMP: red=near-field, blue=far-field(no SSS), cyan=far-field(SSS). Uncomment to re-check regimes.
 //#define BORDER_DEBUG // TEMP: decompose terrain lighting (R=cast shadow, G=NoL, B=skylight) to find a dark band at the near<->far border. Off for normal play.
+//#define TAA_VELOCITY_DEBUG // TEMP: paint TAA reprojection velocity (R=|vx| x50, G=|vy| x50, B=LoD pixel) to attribute history-lag/trailing artifacts. Off for normal play.
+//#define DH_STALE_DEPTH_DEBUG // TEMP: paint vanilla-vs-DH depth disagreement in the overdraw band (stable dim red = mesh coarseness; flaring bright only while rotating = DH depth is a frame stale). Off for normal play.
   // Far-field SSS tunables, used by sss_transmission_sun. Near-field terrain uses
   // the near-field SSS (sss_approx) and ignores these.
   #define SSS_DENSITY 1.0 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0]

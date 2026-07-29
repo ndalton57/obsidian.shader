@@ -66,6 +66,18 @@ uniform float far;
 #include "/include/utility/space_conversion.glsl"
 #endif
 
+#if defined DISTANT_HORIZONS && defined DH_STALE_DEPTH_DEBUG \
+    && !defined DISTANCE_VIEW
+// Self-contained declarations for the stale-depth diagnostic (DISTANCE_VIEW
+// declares gbufferProjectionInverse itself, hence the exclusion). All four
+// are uniforms the working LoD pipeline already consumes - no speculative
+// names.
+uniform sampler2D depthtex1;
+uniform sampler2D dhDepthTex1;
+uniform mat4 gbufferProjectionInverse;
+uniform mat4 dhProjectionInverse;
+#endif
+
 const int debug_text_scale = 2;
 ivec2 debug_text_position = ivec2(0, int(viewHeight) / debug_text_scale);
 
@@ -401,6 +413,34 @@ void main() {
     // Must sample shadowtex0 so that the shadow map is rendered
     if (uv.x < 0.0) {
         fragment_color = texture(shadowtex0, uv).rgb;
+    }
+#endif
+
+#if defined DISTANT_HORIZONS && defined DH_STALE_DEPTH_DEBUG \
+    && !defined DISTANCE_VIEW
+    // TEMP diagnostic: is the DH depth buffer in the CURRENT frame's camera?
+    // In the overdraw band, vanilla and DH both have geometry at the same
+    // pixel; reconstruct each depth into view space with its own inverse
+    // projection and paint the disagreement. Standing still, the two meshes
+    // differ only by LoD coarseness -> a dim, STABLE red pattern. If the
+    // pattern FLARES bright/white only while the camera rotates, the DH
+    // depth is registered to a previous camera -> the shadow-swim cause.
+    // Unchanged between still and panning = staleness ruled out.
+    ivec2 dbg_texel = ivec2(uv * vec2(textureSize(depthtex1, 0)));
+    float dbg_d_vanilla = texelFetch(depthtex1, dbg_texel, 0).x;
+    float dbg_d_dh = texelFetch(dhDepthTex1, dbg_texel, 0).x;
+    if (dbg_d_vanilla < 1.0 && dbg_d_dh < 1.0) {
+        vec4 dbg_v = gbufferProjectionInverse
+            * vec4(vec3(uv, dbg_d_vanilla) * 2.0 - 1.0, 1.0);
+        vec4 dbg_l = dhProjectionInverse
+            * vec4(vec3(uv, dbg_d_dh) * 2.0 - 1.0, 1.0);
+        float dbg_err
+            = distance(dbg_v.xyz / dbg_v.w, dbg_l.xyz / dbg_l.w);
+        fragment_color = vec3(
+            clamp01(dbg_err * 0.25),
+            clamp01(dbg_err * 0.05),
+            0.15
+        );
     }
 #endif
 }

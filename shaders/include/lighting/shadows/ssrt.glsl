@@ -186,25 +186,30 @@ vec2 get_sss_screen_occlusion(
     float dither = texelFetch(noisetex, ivec2(gl_FragCoord.xy) & 511, 0).b;
     dither = r1(frameCounter, dither);
 
-    // Far-field marches the LoD-only opaque buffer in LoD projection with the
-    // LoD near/far planes; near-field stays in combined space.
-    // LoD ray setup is kept EXACTLY input-consistent with the buffer it
-    // marches: the origin depth comes from the SAME opaque buffer the samples
-    // read (an origin from the translucent-inclusive buffer sits a hair off
-    // the sampled surface and beats against the self-intersection bias as
-    // banding), and no TAA-jitter compensation is applied on the LoD path -
-    // the LoD depth is rendered unjittered, so unapplying jitter would
-    // mis-register the ray against it every frame.
-    mat4 proj = combined_projection_matrix;
+    // Two marching spaces, each kept EXACTLY input-consistent with the
+    // buffer it marches:
+    // - LoD pixels march the LoD-only opaque buffer in the LoD projection
+    //   with the LoD near/far planes. The origin depth comes from the SAME
+    //   buffer the samples read (an origin from another buffer sits a hair
+    //   off the sampled surface and beats against the self-intersection
+    //   bias as banding), and no TAA-jitter compensation is applied - the
+    //   LoD depth is rendered unjittered.
+    // - Vanilla pixels march depthtex1 in the VANILLA projection with
+    //   near / far*4 planes. NOT the combined buffer/planes: with a
+    //   LoD-scale far plane the linearized depth of vanilla-range geometry
+    //   is so small that the relative thickness test mass-shadows every
+    //   bump of relief.
+    mat4 proj = gbufferProjection;
     vec3 frag_view = position_view;
-    float frag_z = depth;
-    float near_plane = combined_near;
-    float far_plane = combined_far;
+    float near_plane = near;
+    float far_plane = far * 4.0;
     bool handle_jitter = true;
+    float frag_z
+        = view_to_screen_space(gbufferProjection, position_view, true).z;
 #ifdef LOD_MOD_ACTIVE
     if (is_lod) {
         float depth_lod_solid = texelFetch(
-                                    lod_depth_tex_solid,
+                                    lod_depth_tex_solid_deferred,
                                     ivec2(gl_FragCoord.xy),
                                     0
         )
@@ -263,11 +268,12 @@ vec2 get_sss_screen_occlusion(
         float depth_sample;
 #ifdef LOD_MOD_ACTIVE
         if (is_lod) {
-            depth_sample = texelFetch(lod_depth_tex_solid, sample_texel, 0).x;
+            depth_sample
+                = texelFetch(lod_depth_tex_solid_deferred, sample_texel, 0).x;
         } else
 #endif
         {
-            depth_sample = texelFetch(combined_depth_tex, sample_texel, 0).x;
+            depth_sample = texelFetch(depthtex1, sample_texel, 0).x;
         }
 
         // depth_sample == 0 is an empty LoD texel (sky / no geometry); skip it,

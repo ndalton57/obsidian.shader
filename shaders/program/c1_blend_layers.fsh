@@ -477,14 +477,31 @@ void main() {
     // Voxy translucent LoD layer (colortex17): composite UNDER the vanilla
     // translucent blend - Voxy is always the farthest translucent, so the
     // vanilla water/glass and the glint (colortex13, below) draw over it.
-    // Skipped on the hand: the hand is absent from every depth buffer while
-    // Voxy renders, so this composite - which knows the hand - is the one
-    // place its occlusion can be honored. That skip is the whole reason this
-    // layer has its own buffer.
+    // Composite ONLY where no vanilla OPAQUE surface sits in front of the
+    // Voxy surface. Voxy renders before entities and the hand exist in any
+    // depth buffer, so its in-pass test (voxy_translucent.glsl) can only see
+    // terrain - every later occluder class (a villager's head, the held
+    // item, a boat) must be decided HERE, the one pass with the FINAL
+    // depths. back_depth is already hand-corrected, so the hand is just
+    // another nearer vanilla surface; sky (back_depth = 1.0) never
+    // occludes; the half-block margin keeps vanilla/LoD overdraw ties on
+    // their current path, like the source test.
     vec4 voxy_translucent_color = texelFetch(colortex17, texel, 0);
-    if (!front_is_hand && !back_is_hand) {
-        fragment_color = fragment_color * (1.0 - voxy_translucent_color.a)
-            + voxy_translucent_color.rgb;
+    if (voxy_translucent_color.a > eps) {
+        float z_vanilla_opaque = screen_to_view_space_depth(
+            gbufferProjectionInverse,
+            back_depth
+        );
+        float z_voxy_translucent = screen_to_view_space_depth(
+            lod_projection_matrix_inverse,
+            front_depth_lod
+        );
+        bool voxy_occluded = back_depth < 1.0
+            && z_vanilla_opaque < z_voxy_translucent - 0.5;
+        if (!voxy_occluded) {
+            fragment_color = fragment_color * (1.0 - voxy_translucent_color.a)
+                + voxy_translucent_color.rgb;
+        }
     }
 #endif
 

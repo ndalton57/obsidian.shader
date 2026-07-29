@@ -4,11 +4,8 @@
 
 ## Installation
 
-* Obsidian can be used with [Iris](https://irisshaders.dev/download) (recommended) or [OptiFine](https://optifine.net/home) (untested).
-* Drop `obsidian.zip` into your `.minecraft/shaderpacks` folder
-
-### Downloads
-* [Latest commit](https://github.com/ndalton57/obsidian.shader/archive/refs/heads/main.zip) — download the repository as a zip and drop it straight into `shaderpacks`.
+* Obsidian shaders can be used with [Iris](https://irisshaders.dev/download) (recommended) or [OptiFine](https://optifine.net/home) (untested).
+* [Release Page](https://github.com/ndalton57/obsidian.shaders/releases) — download the latest release zip and drop it straight into your `.minecraft/shaderpacks` folder.
 
 ## New Features and Fixes
 
@@ -45,9 +42,9 @@
 </details>
 
 * <details open>
-  <summary>Voxy Support</summary>
+  <summary>Voxy and DH Support</summary>
   
-  <img src="docs/images/voxy.jpg" title="Volumetric clouds ported from Bliss">
+  <img src="docs/images/voxy.dh.jpg">
   
 
 </details>
@@ -73,4 +70,4 @@ This shader pack is basically just me combining a bunch of my favorite shader fe
 
 ## License
 
-Obsidian is distributed under the original Photon Shaders License Agreement (© Benjamin Stott / "SixthSurge"). See [LICENSE](LICENSE) for the full terms.
+Obsidian Shaders is distributed under the original Photon Shaders License Agreement (© Benjamin Stott / "SixthSurge"). See [LICENSE](LICENSE) for the full terms.

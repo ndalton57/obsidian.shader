@@ -51,10 +51,29 @@ void main() {
 
         case DH_BLOCK_GRASS:
         case DH_BLOCK_DIRT:
+            // No ground SSS in the DH path (under test): the reference
+            // shader's DH handling gives grass/dirt no SSS either. Also
+            // isolates whether the trailing-shadow artifact rides the SSS
+            // transmission on ground - with mask 0, leaves are the ONLY
+            // DH SSS carrier.
+            material_mask = 0;
+            break;
+
+#ifdef DH_BLOCK_SNOW
+        case DH_BLOCK_SNOW:
+            // Bleed-light tier (0.5): soft sun bleed through distant snow
+            material_mask = 15;
+            break;
+#endif
+
         case DH_BLOCK_STONE:
         case DH_BLOCK_DEEPSLATE:
         case DH_BLOCK_NETHER_STONE:
-            material_mask = 6; // Dirts, stones, deepslate and netherrack
+            // Stone family: default material, NO SSS. Under Voxy these
+            // blocks are unmapped (mask 0) and take no bleed - lumping them
+            // into the ground mask gave every DH stone face the dirt glow
+            // (sunlight bleeding through whole mountainsides).
+            material_mask = 0;
             break;
 
         case DH_BLOCK_SAND:

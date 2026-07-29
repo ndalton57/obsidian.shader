@@ -147,7 +147,17 @@ void main() {
     // decal cell to 0 at reach.
     float reach = GRASS_BUSHINESS_REACH; // blocks (fixed; raise for a wider spread)
 #ifdef GRASS_BUSHINESS_DYNAMIC_SCAN
-    int n = min(int(ceil(reach)), GRASS_BUSHINESS_MAX_CELLS);
+    // Scan half-width. falloff(d) = 1 - t^2 with t = clamp((d - 0.5) /
+    // (reach - 0.5), 0, 1) is EXACTLY 0 for every cell at d >= reach, and a
+    // zero falloff contributes nothing anywhere below (max() no-ops, and the
+    // strict `falloff > flower_inf` never claims a flower at 0) - so cells at
+    // integer offset ceil(reach) and beyond are dead taps. ceil(reach) - 1
+    // covers every contributing cell; the floor of 1 keeps the +/-1 ring that
+    // the stalk-spot assignment always needs (spots reach 1.5 blocks from
+    // their flower independently of the falloff). At the default reach 1.5
+    // this scans 3x3 instead of 5x5 - 9 fetches per cell instead of 25, for
+    // every cell of the volume, every frame, with identical output.
+    int n = clamp(int(ceil(reach)) - 1, 1, GRASS_BUSHINESS_MAX_CELLS);
 #else
     const int n = GRASS_BUSHINESS_MAX_CELLS; // compile-time -> the loop unrolls
 #endif

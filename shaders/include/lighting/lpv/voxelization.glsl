@@ -355,10 +355,15 @@ void update_grass_tint(uint block_id) {
 
     // The grass_top atlas tile is identical for every grass block, so one shared
     // cell is enough; side-grown blades sample the real grass texture from it.
-    vec2 uv_minus_mid = gl_MultiTexCoord0.xy - mc_midTexCoord;
-    vec2 tile_offset = min(gl_MultiTexCoord0.xy, mc_midTexCoord - uv_minus_mid);
-    vec2 tile_scale = abs(uv_minus_mid) * 2.0;
-    imageStore(grass_tile_img, ivec2(0), vec4(tile_offset, tile_scale));
+    // One corner vertex per top writes it (every top quad has all 4 corners,
+    // and all of them compute the same value) - the other three skip the
+    // store to the single contended texel.
+    if (corner == ivec2(0)) {
+        vec2 uv_minus_mid = gl_MultiTexCoord0.xy - mc_midTexCoord;
+        vec2 tile_offset = min(gl_MultiTexCoord0.xy, mc_midTexCoord - uv_minus_mid);
+        vec2 tile_scale = abs(uv_minus_mid) * 2.0;
+        imageStore(grass_tile_img, ivec2(0), vec4(tile_offset, tile_scale));
+    }
 }
 #endif
 

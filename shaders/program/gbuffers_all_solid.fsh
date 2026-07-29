@@ -11,10 +11,10 @@
 
 #include "/include/global.glsl"
 
-#if defined GRASS_GEOMETRY && defined POM && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
-// Shader Grass build: POM is turned off on the CUTOUT-terrain program (see the
-// matching #undef in the vertex shader) so the geometry-shader varying block
-// stays small and matches across stages. The SOLID program keeps POM.
+#if (defined GRASS_GEOMETRY || defined GRASS_VERTEX) && defined POM \
+    && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Shader Grass build: POM stays off on the CUTOUT-terrain program (see the
+// matching #undef in the vertex shader). The SOLID program keeps POM.
 #undef POM
 #endif
 
@@ -37,8 +37,10 @@ layout(
 
 #ifdef GRASS_GEOMETRY
 // Shader Grass: receive the varyings from the geometry stage through the same
-// (unnamed) interface block declared in the vertex shader. Member layout must
-// match exactly. Only the cutout-terrain program defines GRASS_GEOMETRY.
+// (unnamed) interface block the geometry shader outputs. Member layout must
+// match exactly. Only the SOLID terrain program defines GRASS_GEOMETRY (the
+// cutout program has no geometry stage - its grass work happens in the
+// vertex shader under GRASS_VERTEX, with the plain varyings below).
 in GrassVertex {
     vec2 uv;
     vec3 scene_pos;
@@ -47,9 +49,6 @@ in GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    flat vec3 block_center; // solid-only: needed for the grower-face election
-#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;

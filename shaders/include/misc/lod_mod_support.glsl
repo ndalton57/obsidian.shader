@@ -17,8 +17,9 @@ uniform sampler2D dhDepthTex1;
 uniform mat4 dhProjection;
 uniform mat4 dhProjectionInverse;
 uniform mat4 dhPreviousProjection;
-uniform mat4 dhModelView;
-uniform mat4 dhModelViewInverse;
+// NB: there is NO dhModelView uniform - Iris exposes no separate DH
+// modelview because DH geometry uses the vanilla one. A declaration here
+// binds nothing and silently reads zeros (the dhVoxyNearPlane class).
 uniform float dhNearPlane;
 uniform float dhFarPlane;
 uniform int dhRenderDistance;
@@ -39,6 +40,16 @@ uniform vec4 combined_projection_matrix_inverse_3;
 #define combined_depth_tex colortex15
 #define lod_depth_tex dhDepthTex
 #define lod_depth_tex_solid dhDepthTex1
+// Deferred-stage alias for the opaque LoD depth. dhDepthTex1 is Iris's
+// post-opaque snapshot COPY; at deferred time it can still hold the
+// PREVIOUS frame's snapshot, so screen-space results computed from it lag
+// the geometry by one frame of camera motion (far-field shadows/AO trail
+// the trees during pans). The live attachment dhDepthTex holds exactly the
+// opaque scene during deferred (no LoD translucents have rendered yet), so
+// deferred passes read it instead. Composite-stage consumers (c1 layer
+// blending, translucency) keep lod_depth_tex_solid: there the snapshot is
+// current-frame and the live texture already includes translucents.
+#define lod_depth_tex_solid_deferred dhDepthTex
 #define lod_depth_tex_scale taau_render_scale
 #define lod_projection_matrix dhProjection
 #define lod_projection_matrix_inverse dhProjectionInverse
@@ -115,6 +126,9 @@ mat4 combined_projection_matrix_inverse = mat4(
 #define combined_depth_tex colortex15
 #define lod_depth_tex vxDepthTexTrans
 #define lod_depth_tex_solid vxDepthTexOpaque
+// vxDepthTexOpaque is the mod's own live opaque buffer (no snapshot copy
+// involved), so the deferred-stage alias is the same texture.
+#define lod_depth_tex_solid_deferred vxDepthTexOpaque
 #define lod_depth_tex_scale 1.0
 #define lod_projection_matrix vxProj
 #define lod_projection_matrix_inverse vxProjInv

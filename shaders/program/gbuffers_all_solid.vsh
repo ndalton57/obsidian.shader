@@ -11,20 +11,23 @@
 
 #include "/include/global.glsl"
 
-#if defined GRASS_GEOMETRY && defined POM && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
-// Shader Grass build: POM is turned off on the CUTOUT-terrain program so its
-// geometry-shader varying block can stay small and simple. The SOLID-terrain
-// program keeps POM (parallax on stone/brick/etc.) and routes the POM varyings
-// through the geometry stage too - see the #ifdef POM members below.
+#if (defined GRASS_GEOMETRY || defined GRASS_VERTEX) && defined POM \
+    && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
+// Shader Grass build: POM stays off on the CUTOUT-terrain program (matching
+// the guard in the fragment shader). The SOLID-terrain program keeps POM
+// (parallax on stone/brick/etc.) and routes the POM varyings through the
+// geometry stage too - see the #ifdef POM members below.
 #undef POM
 #endif
 
 #ifdef GRASS_GEOMETRY
-// Shader Grass: vertex -> geometry -> fragment varyings travel through an
-// (unnamed) interface block so a geometry stage can sit in between. Because the
-// block has no instance name its members stay in global scope, so main() does
-// not change. Both terrain programs (cutout + solid) define GRASS_GEOMETRY; the
-// POM members are present only where POM survives (the solid program).
+// Shader Grass: vertex -> tessellation -> geometry -> fragment varyings
+// travel through an (unnamed) interface block so those stages can sit in
+// between. Because the block has no instance name its members stay in global
+// scope, so main() does not change. Only the SOLID terrain program defines
+// GRASS_GEOMETRY; the cutout program has no geometry stage (its grass work
+// happens right here in the vertex shader, under GRASS_VERTEX below) and
+// uses the plain varyings.
 out GrassVertex {
     vec2 uv;
     vec3 scene_pos;
@@ -33,18 +36,11 @@ out GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
     // Shader Grass: scene-space center of the block this vertex belongs to,
     // computed from at_midBlock. Lets the solid GS/TCS grow grass from ANY
     // submitted face of a grass block (not just the top, which Sodium culls when
     // viewed from below) and plant the blades on the block top regardless.
     flat vec3 block_center;
-#else
-    // Shader Grass (cutout): the UN-WAVED scene position of this vertex. The GS keys
-    // its grass-block lookup on this, so wind sway can't move the lookup into a
-    // neighbouring cell and flash the vanilla tall-grass cross back into view.
-    vec3 rest_scene_pos;
-#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;
@@ -96,10 +92,12 @@ attribute vec4 at_tangent;
 attribute vec3 mc_Entity;
 attribute vec2 mc_midTexCoord;
 
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
+#if defined PROGRAM_GBUFFERS_TERRAIN_SOLID || defined GRASS_VERTEX
 // Shader Grass: vector from this vertex to its block center (1/64-block units,
 // world-axis-aligned), used to find which block a face belongs to. Declared vec3
-// to match the shadow pass (shadow.vsh) - .xyz is the offset we need.
+// to match the shadow pass (shadow.vsh) - .xyz is the offset we need. The
+// cutout program (GRASS_VERTEX) uses it to key its plant rescale/hide on the
+// block, so all vertices of a plant agree.
 attribute vec3 at_midBlock;
 #endif
 
@@ -152,6 +150,22 @@ uniform int currentRenderedItemId;
 #include "/include/utility/space_conversion.glsl"
 #include "/include/vertex/displacement.glsl"
 #include "/include/vertex/utility.glsl"
+
+#if defined GRASS_VERTEX && defined SHADER_GRASS && defined COLORED_LIGHTS
+// Shader Grass (cutout): the grass-block lookup for the plant rescale/hide
+// below - the same voxel read the solid program's geometry stage uses.
+uniform usampler3D voxel_sampler;
+#include "/include/lighting/lpv/voxelization.glsl"
+
+// Voxelized block material at a scene-space position (0 = air / outside volume).
+uint grass_read_voxel(vec3 scene_p) {
+    vec3 vp = scene_to_voxel_space(scene_p);
+    if (!is_inside_voxel_volume(vp)) {
+        return 0u;
+    }
+    return texelFetch(voxel_sampler, ivec3(vp), 0).x & 127u;
+}
+#endif
 
 void main() {
     uv = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;
@@ -210,13 +224,111 @@ void main() {
 
     vec3 pos = transform(gl_ModelViewMatrix, gl_Vertex.xyz);
     pos = view_to_scene_space(pos);
-#if defined GRASS_GEOMETRY && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
-    // Cutout grass: keep the un-waved scene position for the GS's grass-block lookup,
-    // so wind sway doesn't push that lookup into a neighbouring cell (see GrassVertex).
-    rest_scene_pos = pos;
-#endif
     pos = pos + cameraPosition;
+#if defined GRASS_VERTEX && defined SHADER_GRASS
+    // Shader Grass (cutout): world-space center of this vertex's block, taken
+    // BEFORE displacement so wind sway can't move the grass-block lookup into
+    // a neighbouring cell (the same reason the old geometry stage keyed on
+    // un-waved positions).
+    vec3 sg_center_w = pos + at_midBlock * rcp(64.0);
+#endif
     pos = animate_vertex(pos, is_top_vertex, light_levels.y, material_mask);
+#ifdef GRASS_VERTEX
+    // ---- Shader Grass (cutout): plant rescale / hide, in the vertex stage ----
+    // This replaces the cutout geometry stage: a GS here made EVERY cutout
+    // triangle (leaves, crops, plants) pay the geometry-pipeline cost just to
+    // pass through. Per-vertex is equivalent: everything below derives from
+    // at_midBlock, the mesh normal (tbn[2]) or the plant tint. The tint-based
+    // greenish test (mod grass only - vanilla short_grass is mask 85, colour-
+    // independent) can in principle differ across a quad's vertices at a
+    // biome border under smooth per-vertex blending; the old geometry stage
+    // had the same class of split per triangle (it keyed on vertex 0 of each
+    // triangle), so the granularity change is not a regression.
+    {
+        uint sg_mm = material_mask;
+#ifdef SHADER_GRASS
+        // The plants the solid program's blades REPLACE on grass blocks:
+        // shrink them toward their block bottom with the blade cross-fade,
+        // and collapse them fully (zero height -> zero area -> no fragments)
+        // once the blades have taken over. Dedicated short_grass/fern (85) is
+        // colour-independent; mod grass (2) needs the green + ~vertical test
+        // to tell it from flowers. On dirt/podzol (no blades) only the
+        // short-grass 1.25x decal height applies, with no shrink.
+        bool sg_tall = sg_mm == uint(MATERIAL_TALL_GRASS_LOWER)
+            || sg_mm == uint(MATERIAL_TALL_GRASS_UPPER);
+        bool sg_short = sg_mm == uint(MATERIAL_SHORT_GRASS)
+            || (sg_mm == uint(MATERIAL_SMALL_PLANTS)
+                && tint.g > tint.r + 0.04 && tint.g > tint.b + 0.04
+                && abs(tbn[2].y) < 0.5);
+        bool sg_flower = false;
+#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+        // Small flowers + the multicolor ground mats are replaced by the
+        // grown stalk + head near the camera - same cross-fade
+        sg_flower = (sg_mm >= uint(MATERIAL_FLOWER_FIRST)
+                     && sg_mm <= uint(MATERIAL_FLOWER_LAST))
+            || (sg_mm >= uint(MATERIAL_FLOWER_MAT_FIRST)
+                && sg_mm <= uint(MATERIAL_FLOWER_MAT_LAST));
+#endif
+        if (sg_short || sg_tall || sg_flower) {
+            float sg_h = 1.0;
+#ifdef COLORED_LIGHTS
+            // Shrink only ON a grass block (where the blades replace the
+            // plant): voxel-test the supporting block, exactly like the old
+            // geometry stage. Upper tall-grass halves sit one block higher.
+            vec3 sg_base = sg_center_w - cameraPosition - vec3(0.0, 0.5, 0.0);
+            float sg_below
+                = sg_mm == uint(MATERIAL_TALL_GRASS_UPPER) ? 1.4 : 0.4;
+            if (grass_read_voxel(sg_base - vec3(0.0, sg_below, 0.0))
+                == uint(MATERIAL_GRASS_BLOCK)) {
+                // Shrink over [0.6R, 0.8R]: full beyond 0.8R (fills space
+                // past the shader-grass range), gone by 0.6R where the
+                // full-height blades have taken over.
+                sg_h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8,
+                                  length(sg_base));
+            }
+#endif
+            if (sg_h < 0.02) {
+                // Fully replaced by the blades / heads: collapse the whole
+                // primitive to the block center - zero area, zero fragments,
+                // same result as the old geometry stage dropping it. (A flat
+                // ground mat cannot be hidden by a height scale, so collapse
+                // all three axes.)
+                pos = sg_center_w;
+            } else if (abs(tbn[2].y) < 0.5) {
+                // Vertical crosses scale toward their block bottom - the
+                // same pivot the old geometry stage used (its min-vertex-y
+                // IS the block bottom for a cross). Flat ground mats
+                // (|normal.y| >= 0.5) are excluded: their min-vertex-y is
+                // their own plane, so the old stage's scale was an exact
+                // no-op for them - keep that, or the mat would sink into
+                // the ground plane and z-fight across the fade band.
+                float sg_scale = (sg_short ? 1.25 : 1.0) * sg_h;
+                float sg_pivot = sg_center_w.y - 0.5; // own-block bottom
+                pos.y = sg_pivot + (pos.y - sg_pivot) * sg_scale;
+            }
+        }
+#endif // SHADER_GRASS
+        // Re-emit the split-out detection masks the way the old geometry
+        // stage did, so fragment shading / cherry recolor are unchanged:
+        // short_grass + small flowers + the firefly bush -> small plants,
+        // tall-flower lowers -> tall plant lower, ground mats -> their
+        // strong-SSS thin material. Runs with SHADER_GRASS off too (the
+        // detection masks must never reach the gbuffer raw).
+        if (sg_mm == uint(MATERIAL_SHORT_GRASS)
+            || (sg_mm >= uint(MATERIAL_FLOWER_FIRST)
+                && sg_mm <= uint(MATERIAL_FLOWER_LAST))
+            || sg_mm == uint(MATERIAL_FLOWER_FIREFLY_BUSH)) {
+            material_mask = uint(MATERIAL_SMALL_PLANTS);
+        } else if (sg_mm >= uint(MATERIAL_FLOWER_TALL_FIRST)
+                   && sg_mm <= uint(MATERIAL_FLOWER_TALL_LAST)) {
+            material_mask = uint(MATERIAL_TALL_PLANTS_LOWER);
+        } else if (sg_mm >= uint(MATERIAL_FLOWER_MAT_FIRST)
+                   && sg_mm <= uint(MATERIAL_FLOWER_MAT_LAST)) {
+            material_mask = 14u; // their strong-SSS thin material
+        }
+    }
+#endif // GRASS_VERTEX
     pos = pos - cameraPosition;
 
     scene_pos = pos;

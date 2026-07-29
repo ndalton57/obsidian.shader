@@ -8,14 +8,17 @@
   3D blades. The blade construction, wind (calcMovePlants/calcWave) and the
   option set are tuned to keep the blades thin and natural-looking.
 
-  Two terrain programs include this GS:
-   - CUTOUT  (gbuffers_terrain): does NOT grow blades - it re-emits each small green
-     plant (short grass) as a height-scaled quad that shrinks with distance to blend
-     into the solid block-top blades; flowers pass through. POM is off (small block).
-   - SOLID   (gbuffers_terrain_solid, PROGRAM_GBUFFERS_TERRAIN_SOLID): grows
-     blades on every grass-BLOCK top (material_mask == MATERIAL_GRASS_BLOCK,
-     face pointing up, within GRASS_RANGE) while PASSING THE GROUND THROUGH.
-     POM is preserved here, so the POM varyings travel through the GS too.
+  Included ONLY by the SOLID terrain program (gbuffers_terrain_solid,
+  PROGRAM_GBUFFERS_TERRAIN_SOLID): grows blades on every grass-BLOCK top
+  (material_mask == MATERIAL_GRASS_BLOCK, face pointing up, within
+  GRASS_RANGE) while PASSING THE GROUND THROUGH. POM is preserved here, so
+  the POM varyings travel through the GS too.
+
+  The CUTOUT terrain program has NO geometry stage: its grass work (hiding /
+  height-scaling the flat plant crosses that the blades replace) is done in
+  the vertex shader instead (GRASS_VERTEX in gbuffers_all_solid.vsh) - a
+  geometry stage there made EVERY cutout triangle (all leaves, crops, plants)
+  pay the GS pipeline cost just to pass through.
 
   Non-grass triangles (and everything when SHADER_GRASS is off) pass straight
   through unchanged.
@@ -29,23 +32,38 @@
 #include "/include/misc/cherry_grove.glsl"
 #endif
 
-// Keep POM only on the SOLID program; the cutout program drops it (see the
-// matching guards in gbuffers_all_solid.vsh/.fsh) so the varying block stays
-// small. This must agree across vsh/gsh/fsh or the interface block won't link.
-#if defined GRASS_GEOMETRY && defined POM && !defined PROGRAM_GBUFFERS_TERRAIN_SOLID
-#undef POM
-#endif
+layout(triangles) in;
 
-// Vertex budget: (vertices) * (components per vertex) must stay under the GL geometry
-// total-output-component limit (~1024). SOLID emits the ground triangle plus one blade
-// (and carries the POM varyings, ~+9 comps). CUTOUT only re-emits a single (scaled) quad
-// or passes the triangle through, so it needs just 3.
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-layout(triangles) in;
-layout(triangle_strip, max_vertices = 24) out;
+// Vertex budget. The driver statically sizes the GS output buffer from
+// max_vertices x output components, and that allocation limits how many GS
+// invocations run in parallel - paid by EVERY solid triangle in the world,
+// not just the grass. So declare the EXACT worst case per quality, not a
+// rounded-up constant: ground triangle (3) + one blade (2*SEGMENTS + 1 tip
+// vertex), or - with flowers active - stalk stem (2*(SEGMENTS + 1)) + head
+// quad (4), whichever is larger (the stem+head). SEGMENTS is 5/4/3 for
+// quality 2/1/0 (see GRASS_SEGMENTS below); update this table if the
+// per-invocation emission ever changes. Spelled as literals: #version 400
+// layout qualifier values must be integer literals (constant expressions
+// need GL_ARB_enhanced_layouts, which is not required here).
+#ifndef SHADER_GRASS
+layout(triangle_strip, max_vertices = 3) out; // passthrough only
+#elif defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+    && PROCEDURAL_GEOMETRY_MODE >= 2
+#if GRASS_QUALITY == 2
+layout(triangle_strip, max_vertices = 19) out; // 3 + stem 12 + head 4
+#elif GRASS_QUALITY == 1
+layout(triangle_strip, max_vertices = 17) out; // 3 + stem 10 + head 4
 #else
-layout(triangles) in;
-layout(triangle_strip, max_vertices = 3) out;
+layout(triangle_strip, max_vertices = 15) out; // 3 + stem 8 + head 4
+#endif
+#else
+#if GRASS_QUALITY == 2
+layout(triangle_strip, max_vertices = 14) out; // 3 + blade 11
+#elif GRASS_QUALITY == 1
+layout(triangle_strip, max_vertices = 12) out; // 3 + blade 9
+#else
+layout(triangle_strip, max_vertices = 10) out; // 3 + blade 7
+#endif
 #endif
 
 in GrassVertex {
@@ -56,11 +74,7 @@ in GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    flat vec3 block_center; // solid-only: needed for the grower-face election
-#else
-    vec3 rest_scene_pos; // cutout-only: un-waved position for a sway-proof grass-block lookup
-#endif
+    flat vec3 block_center; // needed for the grower-face election
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;
@@ -78,6 +92,10 @@ in GrassVertex {
 flat in float te_grass_elected[];
 #endif
 
+// NOTE: block_center is deliberately ABSENT here (it is a GS input, consumed
+// by the election/blade placement above and never read by the fragment
+// shader) - every component trimmed from this block shrinks the per-vertex
+// GS output stride, which the whole solid pass pays for.
 out GrassVertex {
     vec2 uv;
     vec3 scene_pos;
@@ -86,9 +104,6 @@ out GrassVertex {
     flat mat3 tbn;
     vec2 light_levels;
     float vanilla_ao;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    flat vec3 block_center; // solid-only: needed for the grower-face election
-#endif
 #ifdef POM
     vec2 atlas_tile_coord;
     vec3 tangent_pos;
@@ -133,9 +148,8 @@ uniform usampler3D grass_face_sampler; // Shader Grass: face mask (mode 3 shadow
 // Mode 4 (Race / FCFS): a SINGLE per-block claim buffer. The first drawn face to reach the TCS this
 // frame CAS-claims its block; the GS receives the result as the te_grass_elected patch flag and only
 // runs the election itself in the no-tessellation fallback (where no TCS exists). frameCounter drives
-// the per-frame stamp; both terrain programs compile the election, but only the SOLID program touches
-// the image (the cutout never grows blades, so its grass_claim is stubbed) - image atomics need
-// GL_ARB_shader_image_load_store (#version 400), enabled in the solid GS + TCS stubs.
+// the per-frame stamp - image atomics need GL_ARB_shader_image_load_store
+// (#version 400), enabled in the solid GS + TCS stubs.
 uniform int frameCounter;
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
 layout(r32ui) coherent uniform uimage3D grass_claim_img;
@@ -151,15 +165,6 @@ uniform sampler3D grass_light_sampler;
 uniform sampler2D grass_tile_sampler;
 #include "/include/lighting/lpv/voxelization.glsl"
 #include "/include/misc/grass_election.glsl"
-
-// Voxelized block material at a scene-space position (0 = air / outside volume).
-uint grass_read_voxel(vec3 scene_p) {
-    vec3 vp = scene_to_voxel_space(scene_p);
-    if (!is_inside_voxel_volume(vp)) {
-        return 0u;
-    }
-    return texelFetch(voxel_sampler, ivec3(vp), 0).x & 127u;
-}
 
 #if PROCEDURAL_GEOMETRY_MODE >= 2 && defined PROGRAM_GBUFFERS_TERRAIN_SOLID
 // Shader Grass: reproduce a grass-block top's per-position biome colour AND lightmap by bilinearly
@@ -206,28 +211,11 @@ bool grass_top_reproduce(vec3 block_center, vec2 f_pos, out vec3 tint, out vec2 
 // blade path reads it with one lookup instead of scanning the voxels per blade.
 uniform sampler3D grass_bushiness_sampler;
 
-// Baked decal influence at a cell (0 outside the volume).
-vec4 grass_bushiness_at(ivec3 cell) {
-    if (any(lessThan(cell, ivec3(0)))
-        || any(greaterThanEqual(cell, voxel_volume_size))) {
-        return vec4(0.0);
-    }
-    return texelFetch(grass_bushiness_sampler, cell, 0);
-}
-
 #ifdef GRASS_FLOWERS
 // Shader Grass: the baked flower dye field (same bake pass): rgb = the
 // strongest nearby bloom's petal tone, a = its falloff. Drives the per-blade
 // tip-dye probability.
 uniform sampler3D grass_flower_field_sampler;
-
-vec4 grass_flower_field_at(ivec3 cell) {
-    if (any(lessThan(cell, ivec3(0)))
-        || any(greaterThanEqual(cell, voxel_volume_size))) {
-        return vec4(0.0);
-    }
-    return texelFetch(grass_flower_field_sampler, cell, 0);
-}
 
 // Shader Grass: the baked stalk-spot lists (same bake pass): two rgba32ui
 // texels per cell = up to 8 packed spots landing on that cell's block
@@ -261,9 +249,9 @@ uniform usampler3D grass_flower_spots_sampler;
 #define GRASS_BLADES 1
 #endif
 
-// One (full-detail) blade per sub-triangle; tessellation supplies the field density.
-// Blades are grown by the SOLID program only (the cutout re-emits scaled short-grass
-// quads instead), but both programs compile emit_blade, so define these for both.
+// One (full-detail) blade per sub-triangle; tessellation supplies the field
+// density. If BLADE_COUNT or the per-blade emission ever changes, update the
+// max_vertices table at the top of this file to match.
 #define BLADE_COUNT 1
 #define BLADE_SEGMENTS GRASS_SEGMENTS
 
@@ -382,9 +370,6 @@ void emit_blade_vertex(vec3 scene_p, vec2 vuv, vec4 vtint, vec2 vll, mat3 vtbn) 
     v_out.tbn = vtbn;
     v_out.light_levels = vll;
     v_out.vanilla_ao = 1.0;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-    v_out.block_center = vec3(0.0); // flat, unused by the fragment shader for blades
-#endif
     set_pom_defaults();
     gl_Position = grass_project(scene_p);
     EmitVertex();
@@ -406,8 +391,8 @@ void emit_passthrough(bool grower) {
 #endif
         // Flower masks exist for the voxel volume / flower-head growth; the
         // flat plant itself shades as a small plant (small flowers) or a
-        // tall plant lower half (tall-flower lowers), unchanged (same
-        // pattern as short_grass in emit_short_grass_scaled).
+        // tall plant lower half (tall-flower lowers), unchanged (the cutout
+        // vertex shader applies the same remap table).
         if (v_out.material_mask >= uint(MATERIAL_FLOWER_FIRST)
             && v_out.material_mask <= uint(MATERIAL_FLOWER_LAST)) {
             v_out.material_mask = uint(MATERIAL_SMALL_PLANTS);
@@ -424,9 +409,6 @@ void emit_passthrough(bool grower) {
         v_out.tbn = v_in[i].tbn;
         v_out.light_levels = v_in[i].light_levels;
         v_out.vanilla_ao = v_in[i].vanilla_ao;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-        v_out.block_center = v_in[i].block_center;
-#endif
 #ifdef POM
         v_out.atlas_tile_coord = v_in[i].atlas_tile_coord;
         v_out.tangent_pos = v_in[i].tangent_pos;
@@ -461,46 +443,6 @@ void emit_passthrough(bool grower) {
     EndPrimitive();
 }
 
-#ifndef PROGRAM_GBUFFERS_TERRAIN_SOLID
-// Cutout short_grass re-emit: re-emit the vanilla short_grass billboard at a FIXED height,
-// scaled only by the distance factor `h` (1 = full, 0 = flat) so it SHRINKS into the ground
-// with distance as the block-top blades take over. The SHORT_GRASS_HEIGHT slider drives ONLY
-// the shader-grass blades (their bushiness boost), NOT this decal - the decal's height never
-// changes with the slider. Re-projects from scene space - fine for this billboard (the
-// re-projection acne worry is only the tessellated SOLID ground); the base vert stays put, so
-// no z-fight at the root.
-void emit_short_grass_scaled(float decal_height, float h) {
-    float base_y = min(v_in[0].scene_pos.y, min(v_in[1].scene_pos.y, v_in[2].scene_pos.y));
-    float scale = decal_height * h; // decal height x distance shrink
-    for (int i = 0; i < 3; ++i) {
-        v_out.uv = v_in[i].uv;
-        vec3 sp = v_in[i].scene_pos;
-        sp.y = base_y + (sp.y - base_y) * scale; // pull the top toward the ground
-        v_out.scene_pos = sp;
-        v_out.tint = v_in[i].tint;
-        // Re-emit dedicated short_grass (85) and the flower-colour masks as
-        // MATERIAL_SMALL_PLANTS (2) - and the ground mats as their strong-SSS
-        // material (14) - so the fragment shader's shading and cherry-grove
-        // recolor treat them exactly as before the material split.
-        uint mm = v_in[i].material_mask;
-        bool remap_mm = mm == uint(MATERIAL_SHORT_GRASS)
-            || (mm >= uint(MATERIAL_FLOWER_FIRST)
-                && mm <= uint(MATERIAL_FLOWER_LAST));
-        bool remap_mat = mm >= uint(MATERIAL_FLOWER_MAT_FIRST)
-            && mm <= uint(MATERIAL_FLOWER_MAT_LAST);
-        v_out.material_mask = remap_mm
-            ? uint(MATERIAL_SMALL_PLANTS)
-            : (remap_mat ? 14u : mm);
-        v_out.tbn = v_in[i].tbn;
-        v_out.light_levels = v_in[i].light_levels;
-        v_out.vanilla_ao = v_in[i].vanilla_ao;
-        gl_Position = grass_project(sp);
-        EmitVertex();
-    }
-    EndPrimitive();
-}
-#endif
-
 // Build one tapered, curved, waving blade. `root` is the scene-space base (used
 // to build/project the vertices); `world_root` is the PRECISE world-space base
 // (used only to drive the wind, so it stays stable as the camera moves).
@@ -511,6 +453,11 @@ void emit_short_grass_scaled(float decal_height, float h) {
 void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
                 vec4 src_tint, vec2 guv, vec2 gll, vec3 wind_blade,
                 vec3 tip_tint, float tip_amt) {
+    // Blade normal: mostly up, leaning along the width axis. Constant along
+    // the blade, so built once outside the segment loop.
+    vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
+    mat3 btbn = mat3(right, normalize(cross(nrm, right)), nrm);
+
     for (int s = 0; s <= BLADE_SEGMENTS; ++s) {
         float tt = float(s) / float(BLADE_SEGMENTS);
         float curve = tt * tt; // bend more toward the tip
@@ -520,10 +467,6 @@ void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
 
         // Width tapers from base to tip (GRASS_THICKNESS_FALLOFF controls it)
         float w = GRASS_HALF_WIDTH * (1.0 - tt * GRASS_THICKNESS_FALLOFF);
-
-        // Blade normal: mostly up, leaning along the width axis
-        vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
-        mat3 btbn = mat3(right, normalize(cross(nrm, right)), nrm);
 
         // Roots darker (height fade). src_tint is the vanilla per-vertex grass
         // tint (gl_Color) = the biome grass colour, which also tracks grass-fade
@@ -547,7 +490,7 @@ void emit_blade(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
     EndPrimitive();
 }
 
-#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+#if defined SHADER_GRASS && defined GRASS_FLOWERS && defined COLORED_LIGHTS \
     && PROCEDURAL_GEOMETRY_MODE >= 2
 // Map a position onto the block-top's [0,1]^2 f-space - the SAME relabel
 // rules the blade placement uses (see the centroid mapping in main), so a
@@ -602,6 +545,10 @@ bool grass_flower_contains(vec2 e0, vec2 e1, vec2 e2, vec2 sp) {
 // up, slightly wider than a blade. A flower stalk, not a grass blade.
 void emit_stem(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
                vec4 stint, vec2 guv, vec2 gll, vec3 wind_blade) {
+    // Constant along the stem - built once outside the segment loop.
+    vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
+    mat3 btbn = mat3(right, normalize(cross(nrm, right)), nrm);
+
     for (int s = 0; s <= BLADE_SEGMENTS; ++s) {
         float tt = float(s) / float(BLADE_SEGMENTS);
         float curve = tt * tt;
@@ -611,9 +558,6 @@ void emit_stem(vec3 root, vec3 world_root, float bh, vec3 right, vec3 lean,
 
         float w = GRASS_HALF_WIDTH * 1.15
             * max(1.0 - tt * GRASS_THICKNESS_FALLOFF, 0.45);
-
-        vec3 nrm = normalize(vec3(right.z, 2.0, -right.x));
-        mat3 btbn = mat3(right, normalize(cross(nrm, right)), nrm);
 
         float heightfade = smoothstep(-0.35, 1.0, tt);
         vec4 col = stint;
@@ -771,9 +715,6 @@ void emit_flower_head(vec3 center, vec3 right, uint family_mask,
         v_out.tbn = htbn;
         v_out.light_levels = gll;
         v_out.vanilla_ao = 1.0;
-#ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
-        v_out.block_center = vec3(0.0);
-#endif
         set_pom_defaults();
         gl_Position = grass_project(p);
         EmitVertex();
@@ -818,23 +759,9 @@ void main() {
         make_grass = in_range && v_in[0].tbn[2].y > 0.9;
 #endif
     }
-#endif
-#else
-    // Cutout grass. Material 85 is dedicated short_grass/fern -> ALWAYS grass (no colour test, so
-    // savanna's yellow grass is caught too). Material 2 (flowers + mod grasses) still needs the green
-    // + ~vertical test to tell mod grass from flowers. Either way it re-emits at SHORT_GRASS_HEIGHT
-    // and SHRINKS to 0 with distance on a grass block (cross-fade into the block-top blades).
-    if (v_in[0].material_mask == uint(MATERIAL_SHORT_GRASS)) {
-        make_grass = true;
-    } else if (v_in[0].material_mask == uint(MATERIAL_SMALL_PLANTS)) {
-        vec3 t = v_in[0].tint.rgb;
-        bool greenish = (t.g > t.r + 0.04) && (t.g > t.b + 0.04);
-        vec3 face_n = cross(p1 - p0, p2 - p0);
-        bool vertical = abs(normalize(face_n + vec3(0.0, 1e-6, 0.0)).y) < 0.5;
-        make_grass = greenish && vertical;
-    }
-#endif
-#endif
+#endif // IRIS_FEATURE_TESSELLATION_SHADERS
+#endif // PROGRAM_GBUFFERS_TERRAIN_SOLID
+#endif // SHADER_GRASS
 
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
     // Solid terrain: ALWAYS keep the ground; grass is added on top. Pass make_grass
@@ -843,105 +770,6 @@ void main() {
     if (!make_grass) {
         return;
     }
-#else
-#ifdef SHADER_GRASS
-    // Cutout: tall_grass/large_fern (82/83) are REPLACED by the lifted grass-block-top blades on
-    // grass blocks - hide the flat cross there, cross-fading it out with distance the way
-    // short_grass does. On dirt/podzol (no blades to take over) it stays the vanilla cross.
-    if (v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_LOWER)
-        || v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_UPPER)) {
-        float h = 1.0;
-#ifdef COLORED_LIGHTS
-        // Look up the grass block on the UN-WAVED position (rest_scene_pos), not the
-        // wind-blown vertices - otherwise a gust pushes the lookup into a neighbouring
-        // cell, the grass-block check fails, and the flat cross flashes back in.
-        vec3 q0 = v_in[0].rest_scene_pos;
-        vec3 q1 = v_in[1].rest_scene_pos;
-        vec3 q2 = v_in[2].rest_scene_pos;
-        vec3 base = vec3(
-            (q0.x + q1.x + q2.x) * (1.0 / 3.0),
-            min(q0.y, min(q1.y, q2.y)),
-            (q0.z + q1.z + q2.z) * (1.0 / 3.0)
-        );
-        // Grass block below the plant: lower half ~0.4 below its base, upper half ~1.4.
-        float below = v_in[0].material_mask == uint(MATERIAL_TALL_GRASS_UPPER) ? 1.4 : 0.4;
-        if (grass_read_voxel(base - vec3(0.0, below, 0.0)) == uint(MATERIAL_GRASS_BLOCK)) {
-            h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8, length(base));
-            if (h < 0.02) {
-                return; // fully replaced by the tall blades
-            }
-        }
-#endif
-        emit_short_grass_scaled(1.0, h); // natural tall-grass height, cross-fade with distance
-        return;
-    }
-
-#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
-    && PROCEDURAL_GEOMETRY_MODE >= 2
-    // Family-mask small flowers AND the multicolor ground mats (wildflowers,
-    // pink_petals) are REPLACED by the grown heads on grass blocks - hide the
-    // flat geometry with the same distance cross-fade the short/tall grass
-    // replacements use. On dirt/podzol (no blades, no stalk) it stays.
-    uint fmm = v_in[0].material_mask;
-    if ((fmm >= uint(MATERIAL_FLOWER_FIRST)
-         && fmm <= uint(MATERIAL_FLOWER_LAST))
-        || (fmm >= uint(MATERIAL_FLOWER_MAT_FIRST)
-            && fmm <= uint(MATERIAL_FLOWER_MAT_LAST))) {
-        float h = 1.0;
-        // Un-waved lookup (see the tall-grass block above)
-        vec3 fq0 = v_in[0].rest_scene_pos;
-        vec3 fq1 = v_in[1].rest_scene_pos;
-        vec3 fq2 = v_in[2].rest_scene_pos;
-        vec3 fbase = vec3(
-            (fq0.x + fq1.x + fq2.x) * (1.0 / 3.0),
-            min(fq0.y, min(fq1.y, fq2.y)),
-            (fq0.z + fq1.z + fq2.z) * (1.0 / 3.0)
-        );
-        if (grass_read_voxel(fbase - vec3(0.0, 0.4, 0.0))
-            == uint(MATERIAL_GRASS_BLOCK)) {
-            h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8,
-                           length(fbase));
-            if (h < 0.02) {
-                return; // fully replaced by the stalk + head
-            }
-        }
-        emit_short_grass_scaled(1.0, h);
-        return;
-    }
-#endif
-#endif
-    // Cutout: short_grass (greenish, ~vertical) is re-emitted at the short-grass decal height; when
-    // it sits on a GRASS BLOCK it also SHRINKS to 0 with distance to cross-fade into the block-top
-    // shader grass. On dirt/podzol it just keeps the height (no shrink). Non-grass (flowers,
-    // ...) passes straight through.
-    if (make_grass) {
-        float h = 1.0; // distance shrink (1 = full); only short_grass ON a grass block shrinks
-#ifdef COLORED_LIGHTS
-        // Un-waved lookup (see the tall-grass block above): keeps the grass-block test
-        // stable while the plant sways, so short grass doesn't flicker back in either.
-        vec3 q0 = v_in[0].rest_scene_pos;
-        vec3 q1 = v_in[1].rest_scene_pos;
-        vec3 q2 = v_in[2].rest_scene_pos;
-        vec3 base = vec3(
-            (q0.x + q1.x + q2.x) * (1.0 / 3.0),
-            min(q0.y, min(q1.y, q2.y)),
-            (q0.z + q1.z + q2.z) * (1.0 / 3.0)
-        );
-        if (grass_read_voxel(base - vec3(0.0, 0.4, 0.0))
-            == uint(MATERIAL_GRASS_BLOCK)) {
-            // Shrink over [0.6R, 0.8R]: full beyond 0.8R (fills space past the shader-grass range),
-            // gone by 0.6R where the full-height blades have taken over.
-            h = smoothstep(GRASS_RANGE * 0.6, GRASS_RANGE * 0.8, length(base));
-            if (h < 0.02) {
-                return; // fully shrunk -> hidden (full-height shader grass covers it)
-            }
-        }
-#endif
-        emit_short_grass_scaled(1.25, h); // short-grass decal height x distance shrink
-        return;
-    }
-    emit_passthrough(false); // non-grass (flowers, ...) -> vanilla
-    return;
 #endif
 
 #ifdef PROGRAM_GBUFFERS_TERRAIN_SOLID
@@ -1011,6 +839,37 @@ void main() {
     }
 #endif // PROCEDURAL_GEOMETRY_MODE >= 2
 #endif // COLORED_LIGHTS
+
+    // Conservative view-frustum cull, BEFORE the per-blade texture reads
+    // below. Sub-triangles reach this shader for every drawn face of a
+    // section, including ones far outside the view (behind the camera, past
+    // the screen edge); without this their blades are fully fetched, built
+    // and emitted, then thrown away by the clipper. Every vertex this
+    // invocation can emit lies within cull_r blocks of clump (bound below),
+    // so if that sphere sits entirely outside one frustum plane, nothing
+    // emitted here can produce a pixel - the skip is exact, not a heuristic.
+    // Margins: per world-space unit, clip.x moves by at most P[0][0] (the
+    // projection is symmetric, modelview rows orthonormal), clip.y by
+    // P[1][1], clip.w by 1. Tested on the unjittered clip position; the TAA
+    // jitter is sub-pixel and inside the slack term.
+    {
+        // Emission bound: blade/stalk height incl. the bushiness lift and
+        // the 1.3x per-blade height jitter (0.65 * 1.3 = 0.845), rest lean
+        // (rnd spans [-1, 3] per axis -> sqrt(2) * 3 * 0.35 * randomness)
+        // plus the player push, wind at full storm amplitude, and the stalk
+        // spot offset + head size + slack folded into the constant.
+        float cull_r = 0.845 * BASE_GRASS_HEIGHT
+                * max(SHORT_GRASS_HEIGHT, TALL_GRASS_HEIGHT)
+            + 1.5 * GRASS_RANDOMNESS + 0.5 * GRASS_WAVY_STRENGTH + 2.6;
+        vec4 cc = gbufferProjection * (gbufferModelView * vec4(clump, 1.0));
+        float mx = cull_r * (abs(gbufferProjection[0].x) + 1.0);
+        float my = cull_r * (abs(gbufferProjection[1].y) + 1.0);
+        if (cc.w < -cull_r
+            || cc.x - cc.w > mx || -cc.x - cc.w > mx
+            || cc.y - cc.w > my || -cc.y - cc.w > my) {
+            return; // the ground triangle is already emitted above
+        }
+    }
 
     vec4 src_tint = v_in[0].tint;
     vec2 gll = v_in[0].light_levels;
@@ -1124,11 +983,30 @@ void main() {
         vec2 fxz = vp.xz - 0.5;          // cell-CENTRE alignment for the interpolation
         ivec2 i0 = ivec2(floor(fxz));
         vec2 f = fract(fxz);
+        // The 4 bilinear corner cells are SHARED by the bushiness and flower
+        // field reads: bounds-test each cell once (out of volume reads 0, as
+        // before), then fetch both textures raw. uint(x) < N covers both
+        // x < 0 and x >= N in one compare.
+        ivec3 c00 = ivec3(i0.x,     vy, i0.y);
+        ivec3 c10 = ivec3(i0.x + 1, vy, i0.y);
+        ivec3 c01 = ivec3(i0.x,     vy, i0.y + 1);
+        ivec3 c11 = ivec3(i0.x + 1, vy, i0.y + 1);
+        bool in_y = uint(vy) < uint(VOXEL_VOLUME_SIZE);
+        bool in_x0 = uint(i0.x) < uint(VOXEL_VOLUME_SIZE);
+        bool in_x1 = uint(i0.x + 1) < uint(VOXEL_VOLUME_SIZE);
+        bool in_z0 = uint(i0.y) < uint(VOXEL_VOLUME_SIZE);
+        bool in_z1 = uint(i0.y + 1) < uint(VOXEL_VOLUME_SIZE);
+        bool in00 = in_y && in_x0 && in_z0;
+        bool in10 = in_y && in_x1 && in_z0;
+        bool in01 = in_y && in_x0 && in_z1;
+        bool in11 = in_y && in_x1 && in_z1;
         vec4 infl = mix(
-            mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y)),
-                grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y)), f.x),
-            mix(grass_bushiness_at(ivec3(i0.x,     vy, i0.y + 1)),
-                grass_bushiness_at(ivec3(i0.x + 1, vy, i0.y + 1)), f.x),
+            mix(in00 ? texelFetch(grass_bushiness_sampler, c00, 0) : vec4(0.0),
+                in10 ? texelFetch(grass_bushiness_sampler, c10, 0) : vec4(0.0),
+                f.x),
+            mix(in01 ? texelFetch(grass_bushiness_sampler, c01, 0) : vec4(0.0),
+                in11 ? texelFetch(grass_bushiness_sampler, c11, 0) : vec4(0.0),
+                f.x),
             f.y);
         // The taller boost wins: a tall_grass spot grows ~2-block blades (TALL_GRASS_HEIGHT), a
         // short_grass spot a modest tuft (SHORT_GRASS_HEIGHT). The reach is fixed (bake side).
@@ -1145,10 +1023,14 @@ void main() {
         // blades interleave the PURE cluster colours (the cherry-grove
         // dither discipline) and the washes coexist seamlessly - averaging
         // the tones instead drifted every seam toward the same muddy brown.
-        vec4 d00 = grass_flower_field_at(ivec3(i0.x,     vy, i0.y));
-        vec4 d10 = grass_flower_field_at(ivec3(i0.x + 1, vy, i0.y));
-        vec4 d01 = grass_flower_field_at(ivec3(i0.x,     vy, i0.y + 1));
-        vec4 d11 = grass_flower_field_at(ivec3(i0.x + 1, vy, i0.y + 1));
+        vec4 d00 = in00 ? texelFetch(grass_flower_field_sampler, c00, 0)
+                        : vec4(0.0);
+        vec4 d10 = in10 ? texelFetch(grass_flower_field_sampler, c10, 0)
+                        : vec4(0.0);
+        vec4 d01 = in01 ? texelFetch(grass_flower_field_sampler, c01, 0)
+                        : vec4(0.0);
+        vec4 d11 = in11 ? texelFetch(grass_flower_field_sampler, c11, 0)
+                        : vec4(0.0);
         vec4 dye = mix(mix(d00, d10, f.x), mix(d01, d11, f.x), f.y);
         flower_dye_falloff = dye.a;
         if (dye.a > 1e-3) {
@@ -1204,7 +1086,7 @@ void main() {
     vec3 player_push
         = vec3(player_dir.x, 0.0, player_dir.y) * player_prox * 0.35;
 
-#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+#if defined SHADER_GRASS && defined GRASS_FLOWERS && defined COLORED_LIGHTS \
     && PROCEDURAL_GEOMETRY_MODE >= 2
     // Flower stalks scatter RADIALLY around each bloom (pow-shaped radius,
     // the same falloff spirit as the bushiness heights), so a flower reads
@@ -1326,7 +1208,7 @@ void main() {
         vec3 wind_blade
             = grass_wave(world_root, gll.y, phase_jitter, amp_jitter);
 
-#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+#if defined SHADER_GRASS && defined GRASS_FLOWERS && defined COLORED_LIGHTS \
     && PROCEDURAL_GEOMETRY_MODE >= 2
         if (grow_head) {
             // The claimed stalk grows at ITS OWN world-anchored spot (in
@@ -1419,7 +1301,7 @@ void main() {
             // discipline), so the pick never re-rolls under camera motion.
             vec3 tip_tint = vec3(0.0);
             float tip_amt = 0.0;
-#if defined GRASS_FLOWERS && defined COLORED_LIGHTS \
+#if defined SHADER_GRASS && defined GRASS_FLOWERS && defined COLORED_LIGHTS \
     && PROCEDURAL_GEOMETRY_MODE >= 2
             if (flower_dye_falloff > 1e-3) {
                 ivec2 dye_key = cameraPositionInt.xz * 64

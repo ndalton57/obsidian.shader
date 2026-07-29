@@ -391,5 +391,20 @@ void main() {
     draw_histogram(texel);
 #endif
 
+#ifdef TAA_VELOCITY_DEBUG
+    // TEMP diagnostic: reprojection velocity as color. Pan the camera at a
+    // steady speed and read: R = |velocity.x|, G = |velocity.y| (both x50),
+    // B = this pixel reprojected as LoD. Healthy: LoD (blue-tagged) pixels
+    // carry the SAME red/green intensity as their vanilla neighbours while
+    // panning. LoD pixels staying pure blue in motion = reprojection reports
+    // no movement there -> TAA reuses history in place -> shadows and detail
+    // visibly trail the camera.
+    result.rgb = vec3(
+        clamp01(abs(velocity.x) * 50.0),
+        clamp01(abs(velocity.y) * 50.0),
+        is_lod ? 1.0 : 0.0
+    );
+#endif
+
     bloom_input = result.rgb;
 }
